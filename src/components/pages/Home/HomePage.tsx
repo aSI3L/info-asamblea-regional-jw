@@ -48,7 +48,7 @@ export function HomePage() {
                 <MainHeader />
                 <div className="max-w-6xl mx-auto">
                   <div className="flex justify-between items-center pb-6">
-                    <span className="text-2xl md:text-3xl font-bold text-nature-forest">Categorías</span>
+                    <span className="text-2xl md:text-3xl font-bold text-secondaryColor">Categorías</span>
                     <NavigationCarrousel scrollNext={scrollNext} scrollPrev={scrollPrev} />
                   </div>
         

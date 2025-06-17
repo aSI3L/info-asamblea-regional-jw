@@ -16,9 +16,9 @@ export function CategoryCard({ category }: CategoryCardProps) {
                         backgroundImage: `url('${category.backgroundImage}')`,
                         }}
                     >
-                        <div className="absolute inset-0 bg-gradient-to-t from-secondary-dark/90 via-secondary-dark/50 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-secondaryColor/90 via-secondaryColor/50 to-transparent" />
                     </div>
-                    <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 text-white">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 text-primaryColor">
                         <h3 className="text-lg md:text-xl font-bold pb-2 leading-tight">{category.title}</h3>
                         <p className="text-sm md:text-base leading-relaxed">{category.description}</p>
                     </div>

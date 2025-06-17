@@ -11,25 +11,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Colores principales de la paleta
-        primary: {
-          DEFAULT: "#8BC34A", // Verde lima (Sábado)
-          light: "#A4D65E",
-          dark: "#689F38",
-        },
-        secondary: {
-          DEFAULT: "#4DB6AC", // Azul turquesa (Viernes/Domingo)
-          light: "#80CBC4",
-          dark: "#005249",
-        },
-        // Colores de la imagen banner
-        nature: {
-          water: "#7BBEBC", // Azul turquesa del agua
-          forest: "#5D8B7F", // Verde bosque
-          light: "#D6E8D4", // Verde claro/menta
-          cream: "#F0EBE0", // Color crema/beige de las túnicas
-          glow: "#F9F3D9", // Tono dorado de la luz
-        },
+        primaryColor: "#D6E8D4",
+        secondaryColor: "#005249",
+        accentColor: "#8BC34A",
         // Colores de fondo y texto
         background: {
           DEFAULT: "#121212", // Fondo negro
