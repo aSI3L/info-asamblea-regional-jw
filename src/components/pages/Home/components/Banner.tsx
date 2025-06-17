@@ -1,4 +1,4 @@
-export function HeroSection() {
+export function Banner() {
   return (
     <section className="relative overflow-hidden">
       {/* Background Image - usando la imagen real del banner */}

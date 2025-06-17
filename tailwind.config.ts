@@ -20,7 +20,7 @@ const config: Config = {
         secondary: {
           DEFAULT: "#4DB6AC", // Azul turquesa (Viernes/Domingo)
           light: "#80CBC4",
-          dark: "#00897B",
+          dark: "#005249",
         },
         // Colores de la imagen banner
         nature: {

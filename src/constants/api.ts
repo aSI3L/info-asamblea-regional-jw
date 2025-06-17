@@ -1,8 +1,4 @@
 export const API_ENDPOINTS = {
-  FIREBASE: {
-    CATEGORIES: "categories",
-    ASSEMBLY_INFO: "assembly/info",
-  },
   GOOGLE_MAPS: {
     PLACES_SEARCH: "/place/textsearch/json",
     PLACE_DETAILS: "/place/details/json",

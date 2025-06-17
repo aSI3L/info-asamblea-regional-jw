@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import '../app/globals.css'
 
 export const metadata: Metadata = {
-  title: '"Adoración Pura" Asamblea Regional 2025',
+  title: 'Asamblea Regional de los Testigos de Jehová',
   description: '',
 }
 
