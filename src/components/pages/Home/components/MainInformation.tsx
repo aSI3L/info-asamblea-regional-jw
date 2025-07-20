@@ -1,21 +1,22 @@
-"use client"
-
 import { Separator } from "@/components/ui/separator";
-import { useInfoPrincipal } from "@/hooks/useInfoPrincipal";
 
-export function MainHeader() {
-  const { infoPrincipal } = useInfoPrincipal()
+interface MainHeaderProps {
+  mainTitle: string
+  year: number
+}
+
+export function MainHeader({ mainTitle, year }: MainHeaderProps) {
     return (
         <header className="text-center pb-8 md:pb-12">
           {/* Diseño elegante inspirado en la imagen */}
           <div className="max-w-4xl mx-auto">
               <h3 className="text-4xl md:text-5xl lg:text-6xl font-light text-secondaryColor tracking-[0.2em] mb-4 uppercase">
-                { infoPrincipal.mainTitle !== "" ? infoPrincipal.mainTitle : "Título Asamblea" }
+                { mainTitle !== "" ? mainTitle : "Título Asamblea" }
               </h3>
 
               <div className="flex items-center justify-center gap-4 pb-4">
                 <Separator className="w-32 md:w-48 lg:w-64 h-px bg-secondaryColor" />
-                <span className="text-xl md:text-2xl font-light text-secondaryColor-80">{ infoPrincipal.year !== 0 ? infoPrincipal.year : "Año Asamblea"}</span>
+                <span className="text-xl md:text-2xl font-light text-secondaryColor-80">{ year !== 0 ? year : "Año Asamblea"}</span>
                 <Separator className="w-32 md:w-48 lg:w-64 h-px bg-secondaryColor" />
               </div>
 

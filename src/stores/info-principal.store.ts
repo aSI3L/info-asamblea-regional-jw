@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 interface InfoPrincipalStore {
     infoPrincipal: InfoPrincipalType
+    loadingInfoPrincipal: boolean
     getInfoPrincipal: () => Promise<void>
 }
 
@@ -18,12 +19,12 @@ export const useInfoPrincipalStore = create<InfoPrincipalStore>((set) => ({
             accent: ""
         }
     },
+    loadingInfoPrincipal: true,
     getInfoPrincipal: async () => {
         const infoPrincipalResponse = await infoPrincipalService.getAll()
         if (infoPrincipalResponse && Array.isArray(infoPrincipalResponse) && infoPrincipalResponse.length > 0) {
             set(() => ({ infoPrincipal: infoPrincipalResponse[0] }))
-        } else {
-            console.log("Error: Get Info Principal")
         }
+        set(() => ({ loadingInfoPrincipal: false }))
     },
 }))

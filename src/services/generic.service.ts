@@ -43,41 +43,4 @@ export class GenericService<T extends { id?: string}> {
             return null
         }
     }
-
-    async create (data: Omit<T, 'id'>): Promise<T | null> {
-        try {
-            const docRef = await addDoc(collection(db, this.collectionName), data)
-            return this.applyAdapter({ id: docRef.id, ...data})
-        } catch (error) {
-            if (error instanceof FirebaseError) {
-                const { message, code } = error
-                console.log(message, code)
-            }
-            return null
-        }
-    }
-
-    async update (id: string, data: T): Promise<void> {
-        try {
-            const docRef = doc(db, this.collectionName, id)
-            await setDoc(docRef, data)
-        } catch (error) {
-            if (error instanceof FirebaseError) {
-                const { message, code } = error
-                console.log(message, code)
-            }
-        }
-    }
-
-    async delete (id: string): Promise<void> {
-        try {
-            const docRef = doc(db, this.collectionName, id)
-            await deleteDoc(docRef)
-        } catch (error) {
-            if (error instanceof FirebaseError) {
-                const { message, code } = error
-                console.log(message, code)
-            }
-        }
-    }
 }

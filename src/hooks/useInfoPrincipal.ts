@@ -1,8 +1,9 @@
 import { useInfoPrincipalStore } from "@/stores/info-principal.store"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 
 export const useInfoPrincipal = () => {
     const infoPrincipal = useInfoPrincipalStore(state => state.infoPrincipal)
+    const loadingInfoPrincipal = useInfoPrincipalStore(state => state.loadingInfoPrincipal)
     const getInfoPrincipal = useInfoPrincipalStore(state => state.getInfoPrincipal)
 
     useEffect(() => {
@@ -17,5 +18,5 @@ export const useInfoPrincipal = () => {
         }
     }, [infoPrincipal])
 
-    return { infoPrincipal }
+    return { infoPrincipal, loadingInfoPrincipal }
 }
