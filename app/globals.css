@@ -10,6 +10,39 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  .text-primaryColor-80 {
+    color: color-mix(in srgb, var(--primary-color) 80%, transparent);
+  }
+  
+  .text-secondaryColor-80 {
+    color: color-mix(in srgb, var(--secondary-color) 80%, transparent);
+  }
+  
+  .text-accentColor-80 {
+    color: color-mix(in srgb, var(--accent-color) 80%, transparent);
+  }
+  
+  .from-secondaryColor-90 {
+    --tw-gradient-from: color-mix(in srgb, var(--secondary-color) 90%, transparent) var(--tw-gradient-from-position);
+    --tw-gradient-to: transparent var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+  }
+  
+  .from-secondaryColor-50 {
+    --tw-gradient-from: color-mix(in srgb, var(--secondary-color) 50%, transparent) var(--tw-gradient-from-position);
+    --tw-gradient-to: transparent var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+  }
+  
+  .via-secondaryColor-50 {
+    --tw-gradient-to: transparent var(--tw-gradient-to-position);
+    --tw-gradient-stops: var(--tw-gradient-from), color-mix(in srgb, var(--secondary-color) 50%, transparent) var(--tw-gradient-via-position), var(--tw-gradient-to);
+  }
+
+  .to-primaryColor-80 {
+    --tw-gradient-to: color-mix(in srgb, var(--primary-color) 80%, transparent) var(--tw-gradient-to-position);
+  }
 }
 
 @layer base {

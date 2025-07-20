@@ -11,9 +11,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primaryColor: "#D6E8D4",
-        secondaryColor: "#005249",
-        accentColor: "#8BC34A",
+        primaryColor: "var(--primary-color)"/*"#D6E8D4"*/,
+        secondaryColor: "var(--secondary-color)"/*"#005249"*/,
+        accentColor: "var(--accent-color)"/*"#8BC34A"*/,
         // Colores de fondo y texto
         background: {
           DEFAULT: "#121212", // Fondo negro
@@ -23,7 +23,6 @@ const config: Config = {
           DEFAULT: "#FFFFFF", // Texto blanco
           muted: "#CCCCCC", // Texto gris claro
         },
-        // Mantener colores de shadcn/ui
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

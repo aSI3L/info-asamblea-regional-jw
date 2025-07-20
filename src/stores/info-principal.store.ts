@@ -11,6 +11,7 @@ export const useInfoPrincipalStore = create<InfoPrincipalStore>((set) => ({
     infoPrincipal: {
         mainTitle: "",
         year: 0,
+        imageUrl: "",
         color: {
             primary: "",
             secondary: "",
