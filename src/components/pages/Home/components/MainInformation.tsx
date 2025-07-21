@@ -10,9 +10,9 @@ export function MainHeader({ mainTitle, year }: MainHeaderProps) {
         <header className="text-center pb-8 md:pb-12">
           {/* Diseño elegante inspirado en la imagen */}
           <div className="max-w-4xl mx-auto">
-              <h3 className="text-4xl md:text-5xl lg:text-6xl font-light text-secondaryColor tracking-[0.2em] mb-4 uppercase">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-light text-secondaryColor tracking-[0.2em] mb-4 uppercase">
                 { mainTitle !== "" ? mainTitle : "Título Asamblea" }
-              </h3>
+              </h1>
 
               <div className="flex items-center justify-center gap-4 pb-4">
                 <Separator className="w-32 md:w-48 lg:w-64 h-px bg-secondaryColor" />

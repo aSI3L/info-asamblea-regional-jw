@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import '../app/globals.css'
+import { DataLoader } from '@/components/common/DataLoader/DataLoader'
 
 export const metadata: Metadata = {
   title: 'Asamblea Regional de los Testigos de Jehová',
@@ -13,7 +14,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <DataLoader>
+          {children}
+        </DataLoader>
+      </body>
     </html>
   )
 }
