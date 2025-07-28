@@ -1,0 +1,1 @@
+export { InternalPageLayout } from './InternalPageLayout'

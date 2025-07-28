@@ -22,25 +22,82 @@ export function ServiciosPage() {
   const [hasSearched, setHasSearched] = useState(false)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: any }>>([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
+  const [searchingPlaces, setSearchingPlaces] = useState(false)
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
   const userMarkerRef = useRef<any>(null)
   const listItemRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
-  // Opciones de categorías
-  const categories = [
-    { value: "", label: "Seleccionar categoría", icon: Search },
-    { value: "restaurant", label: "Restaurantes", icon: Utensils },
-    { value: "lodging", label: "Hoteles", icon: Bed },
-    { value: "gas_station", label: "Gasolineras", icon: Car },
-    { value: "hospital", label: "Hospitales", icon: AlertCircle },
-    { value: "pharmacy", label: "Farmacias", icon: AlertCircle },
-    { value: "bank", label: "Bancos", icon: AlertCircle },
-    { value: "atm", label: "Cajeros automáticos", icon: AlertCircle },
-    { value: "shopping_mall", label: "Centros comerciales", icon: AlertCircle },
-    { value: "supermarket", label: "Supermercados", icon: AlertCircle }
-  ]
+  // Función para mapear nombres de iconos a componentes
+  const getIconComponent = (iconName: string) => {
+    const iconMap: { [key: string]: any } = {
+      Search,
+      Utensils,
+      Bed,
+      Car,
+      AlertCircle,
+      MapPin,
+      Menu,
+      ChevronDown,
+      X
+    }
+    return iconMap[iconName] || AlertCircle
+  }
+
+  // Función para cargar categorías desde la API
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true)
+      const response = await fetch('https://3af90b44146341a5b809dfc47c15d752.api.mockbin.io/')
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar categorías')
+      }
+      
+      const data = await response.json()
+      
+      // Mapear los iconos de string a componentes
+      const categoriesWithIcons = data.categories.map((category: any) => ({
+        ...category,
+        icon: getIconComponent(category.icon)
+      }))
+      
+      setCategories(categoriesWithIcons)
+      
+      // Seleccionar automáticamente la primera categoría válida (que no sea vacía)
+      const firstValidCategory = categoriesWithIcons.find((cat: any) => cat.value !== "")
+      if (firstValidCategory && !selectedCategory) {
+        setSelectedCategory(firstValidCategory.value)
+        // Ejecutar búsqueda automáticamente para la primera categoría
+        setTimeout(() => {
+          handleSearch(firstValidCategory.value)
+        }, 100)
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error)
+      // Fallback a categorías por defecto en caso de error
+      const fallbackCategories = [
+        { value: "", label: "Seleccionar categoría", icon: Search },
+        { value: "restaurant", label: "Restaurantes", icon: Utensils },
+        { value: "lodging", label: "Hoteles", icon: Bed },
+        { value: "gas_station", label: "Gasolineras", icon: Car },
+      ]
+      setCategories(fallbackCategories)
+      
+      // Seleccionar la primera categoría válida del fallback
+      if (!selectedCategory) {
+        setSelectedCategory("restaurant")
+        setTimeout(() => {
+          handleSearch("restaurant")
+        }, 100)
+      }
+    } finally {
+      setLoadingCategories(false)
+    }
+  }
 
   // Función para obtener la ubicación del usuario
   const getUserLocation = () => {
@@ -107,7 +164,9 @@ export function ServiciosPage() {
         text: "Tú",
         color: "#ffffff",
         fontSize: "12px",
-        fontWeight: "bold"
+        fontWeight: "bold",
+        background:"#fff",
+        padding:"3px"
       },
       zIndex: 1000 // Asegurar que esté encima de otros marcadores
     })
@@ -128,6 +187,11 @@ export function ServiciosPage() {
   // Solicitar geolocalización automáticamente al cargar el componente
   useEffect(() => {
     getUserLocation()
+  }, [])
+
+  // Cargar categorías al montar el componente
+  useEffect(() => {
+    loadCategories()
   }, [])
   
   useEffect(() => {
@@ -183,7 +247,9 @@ export function ServiciosPage() {
               text: location.name.length > 20 ? location.name.substring(0, 17) + '...' : location.name,
               color: "#000",
               fontSize: "12px",
-              fontWeight: "bold"
+              fontWeight: "bold",
+              background:"#fff",
+              padding:"3px"
             },
             icon: {
               url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
@@ -206,7 +272,9 @@ export function ServiciosPage() {
                 text: loc.name.length > 20 ? loc.name.substring(0, 17) + '...' : loc.name,
                 color: "#ffffff",
                 fontSize: "12px",
-                fontWeight: "bold"
+                fontWeight: "bold",
+                background:"#fff",
+                padding:"3px"
               })
             })
             
@@ -220,7 +288,9 @@ export function ServiciosPage() {
               text: location.name.length > 18 ? location.name.substring(0, 15) + '...' : location.name,
               color: "#000",
               fontSize: "14px",
-              fontWeight: "bold"
+              fontWeight: "bold",
+              background:"#fff",
+              padding:"3px"
             })
             
             // Seleccionar el lugar
@@ -264,6 +334,7 @@ export function ServiciosPage() {
 
   const handleSearch = async (category: string) => {
     if (category) {
+      setSearchingPlaces(true)
       setHasSearched(true)
       
       // Si tenemos la ubicación del usuario, buscar cerca de ella
@@ -273,10 +344,14 @@ export function ServiciosPage() {
       }
       
       setSearchQuery(searchQuery)
-      await searchPlaces(searchQuery)
-      // Abrir el drawer cuando se obtienen resultados
-      if (!isDrawerOpen) {
-        setIsDrawerOpen(true)
+      try {
+        await searchPlaces(searchQuery)
+        // Abrir el drawer cuando se obtienen resultados
+        if (!isDrawerOpen) {
+          setIsDrawerOpen(true)
+        }
+      } finally {
+        setSearchingPlaces(false)
       }
     }
   }
@@ -323,7 +398,9 @@ export function ServiciosPage() {
             text: location.name.length > 18 ? location.name.substring(0, 15) + '...' : location.name,
             color: "#000",
             fontSize: "14px",
-            fontWeight: "bold"
+            fontWeight: "bold",
+            background:"#fff",
+            padding:"3px"
           })
         } else {
           // Restaurar marcadores no seleccionados
@@ -337,7 +414,9 @@ export function ServiciosPage() {
               text: location.name.length > 20 ? location.name.substring(0, 17) + '...' : location.name,
               color: "#000",
               fontSize: "12px",
-              fontWeight: "bold"
+              fontWeight: "bold",
+              background:"#fff",
+              padding:"3px"
             })
           }
         }
@@ -374,16 +453,29 @@ export function ServiciosPage() {
               value={selectedCategory}
               onChange={handleCategoryChange}
               className={styles["servicios-page__select"]}
+              disabled={loadingCategories || searchingPlaces}
             >
-              {categories.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
+              {loadingCategories ? (
+                <option value="">Cargando categorías...</option>
+              ) : (
+                categories.map((category) => (
+                  <option key={category.value} value={category.value}>
+                    {category.label}
+                  </option>
+                ))
+              )}
             </select>
             <ChevronDown className={styles["servicios-page__select-arrow"]} />
           </div>
         </div>
+        
+        {/* Loading indicator para búsqueda */}
+        {searchingPlaces && (
+          <div className={styles["servicios-page__search-loading"]}>
+            <div className={styles["servicios-page__search-loading-spinner"]}></div>
+            <span>Buscando lugares cercanos...</span>
+          </div>
+        )}
         
         {/* Mostrar error de ubicación si existe */}
         {/* {locationError && (

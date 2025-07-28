@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import '../app/globals.css'
+import './globals.css'
+import { Header } from '../src/components/common/Header'
+import { ConditionalHeader } from '../src/components/common/ConditionalHeader/ConditionalHeader'
 
 export const metadata: Metadata = {
   title: '"Adoración Pura" Asamblea Regional 2025',
@@ -13,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <ConditionalHeader />
+        {children}
+      </body>
     </html>
   )
 }
