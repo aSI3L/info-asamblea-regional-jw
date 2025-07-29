@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, MapPin, Utensils, Car, Bed, AlertCircle, X, Menu, ChevronDown } from "lucide-react"
+import { Search, MapPin, Utensils, Car, Bed, AlertCircle, X, Menu, ChevronDown, Check, ChevronsUpDown } from "lucide-react"
 import { useGoogleMaps } from "@/hooks/useGoogleMaps"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,12 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import Image from "next/image"
 import type { GoogleMapsLocation } from "@/types"
+import { SEARCH_CONFIG } from "@/constants/search"
+import { cn } from "@/lib/utils"
 import styles from "./ServiciosPage.module.scss"
 
 export function ServiciosPage() {
-  const { locations, isLoading, error, searchPlaces, getPlaceDetails } = useGoogleMaps()
+  const { locations, isLoading, error, actualRadius, searchPlaces, getPlaceDetails } = useGoogleMaps()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("")
   const [selectedPlace, setSelectedPlace] = useState<GoogleMapsLocation | null>(null)
@@ -25,6 +29,11 @@ export function ServiciosPage() {
   const [categories, setCategories] = useState<Array<{ value: string; label: string; icon: any }>>([])
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [searchingPlaces, setSearchingPlaces] = useState(false)
+  const [isRefreshingWithLocation, setIsRefreshingWithLocation] = useState(false)
+  const [searchRadius, setSearchRadius] = useState<number>(SEARCH_CONFIG.DEFAULT_RADIUS) // Radio inicial
+  const [isLocationReady, setIsLocationReady] = useState(false) // Flag para saber si la geolocalización ya se procesó
+  const [open, setOpen] = useState(false) // Para el popover del autocompletado
+  const [inputValue, setInputValue] = useState("") // Para el valor del input de búsqueda
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
@@ -42,6 +51,8 @@ export function ServiciosPage() {
       MapPin,
       Menu,
       ChevronDown,
+      Check,
+      ChevronsUpDown,
       X
     }
     return iconMap[iconName] || AlertCircle
@@ -71,10 +82,8 @@ export function ServiciosPage() {
       const firstValidCategory = categoriesWithIcons.find((cat: any) => cat.value !== "")
       if (firstValidCategory && !selectedCategory) {
         setSelectedCategory(firstValidCategory.value)
-        // Ejecutar búsqueda automáticamente para la primera categoría
-        setTimeout(() => {
-          handleSearch(firstValidCategory.value)
-        }, 100)
+        setInputValue(firstValidCategory.label) // Establecer el texto del input
+        // NO ejecutar búsqueda aquí - esperar a que la geolocalización esté lista
       }
     } catch (error) {
       console.error('Error loading categories:', error)
@@ -90,9 +99,8 @@ export function ServiciosPage() {
       // Seleccionar la primera categoría válida del fallback
       if (!selectedCategory) {
         setSelectedCategory("restaurant")
-        setTimeout(() => {
-          handleSearch("restaurant")
-        }, 100)
+        setInputValue("Restaurantes") // Establecer el texto del input para el fallback
+        // NO ejecutar búsqueda aquí - esperar a que la geolocalización esté lista
       }
     } finally {
       setLoadingCategories(false)
@@ -112,13 +120,27 @@ export function ServiciosPage() {
       (position) => {
         const { latitude, longitude } = position.coords
         setUserLocation({ lat: latitude, lng: longitude })
+        setIsLocationReady(true) // Marcar que la geolocalización está lista
         
         // Si el mapa ya está inicializado, agregar el marcador del usuario
         if (mapInstanceRef.current) {
           addUserMarkerToMap(latitude, longitude)
         }
+
+        // Refrescar automáticamente con la categoría seleccionada actual
+        // para mostrar lugares cercanos a la nueva ubicación
+        if (selectedCategory && selectedCategory !== "") {
+          setIsRefreshingWithLocation(true)
+          setTimeout(() => {
+            handleSearch(selectedCategory).finally(() => {
+              setIsRefreshingWithLocation(false)
+            })
+          }, 500) // Pequeño delay para que se procese la ubicación
+        }
       },
       (error) => {
+        // Marcar como lista incluso si falla (para permitir búsquedas generales)
+        setIsLocationReady(true)
         switch (error.code) {
           case error.PERMISSION_DENIED:
             setLocationError("Se denegó el acceso a la ubicación")
@@ -171,7 +193,7 @@ export function ServiciosPage() {
       zIndex: 1000 // Asegurar que esté encima de otros marcadores
     })
 
-    // Crear círculo de precisión alrededor del usuario
+    // Crear círculo de precisión alrededor del usuario (100m)
     new (window as any).google.maps.Circle({
       strokeColor: "#4285F4",
       strokeOpacity: 0.8,
@@ -180,7 +202,19 @@ export function ServiciosPage() {
       fillOpacity: 0.15,
       map: mapInstanceRef.current,
       center: { lat, lng },
-      radius: 100 // 100 metros de radio
+      radius: SEARCH_CONFIG.PRECISION_RADIUS // 100 metros de radio para precisión
+    })
+
+    // Crear círculo de área de búsqueda (radio dinámico)
+    new (window as any).google.maps.Circle({
+      strokeColor: "#10B981",
+      strokeOpacity: 0.6,
+      strokeWeight: 2,
+      fillColor: "#10B981",
+      fillOpacity: 0.1,
+      map: mapInstanceRef.current,
+      center: { lat, lng },
+      radius: actualRadius || searchRadius // Usar radio efectivo o el configurado
     })
   }
   
@@ -193,6 +227,16 @@ export function ServiciosPage() {
   useEffect(() => {
     loadCategories()
   }, [])
+
+  // Ejecutar búsqueda inicial cuando tanto categorías como geolocalización estén listos
+  useEffect(() => {
+    if (isLocationReady && !loadingCategories && selectedCategory && selectedCategory !== "" && !hasSearched) {
+      // Ejecutar la primera búsqueda con toda la información disponible
+      setTimeout(() => {
+        handleSearch(selectedCategory)
+      }, 100)
+    }
+  }, [isLocationReady, loadingCategories, selectedCategory, hasSearched])
   
   useEffect(() => {
     if (hasSearched && locations.length > 0 && mapRef.current && !mapInstanceRef.current) {
@@ -227,6 +271,22 @@ export function ServiciosPage() {
               stylers: [{ color: "#f0fdf4" }]
             }
           ]
+        })
+
+        // Crear bounds para ajustar el zoom automáticamente
+        const bounds = new (window as any).google.maps.LatLngBounds()
+        
+        // Agregar la ubicación del usuario a los bounds si existe
+        if (userLocation) {
+          bounds.extend(new (window as any).google.maps.LatLng(userLocation.lat, userLocation.lng))
+        }
+        
+        // Agregar todas las ubicaciones de los lugares a los bounds
+        locations.forEach((location) => {
+          bounds.extend(new (window as any).google.maps.LatLng(
+            location.geometry.location.lat,
+            location.geometry.location.lng
+          ))
         })
 
         // Agregar marcador del usuario si existe la ubicación
@@ -302,6 +362,28 @@ export function ServiciosPage() {
           
           markersRef.current.push(marker)
         })
+        
+        // Ajustar el zoom y centro del mapa para mostrar todos los marcadores
+        if (!bounds.isEmpty()) {
+          mapInstanceRef.current.fitBounds(bounds, {
+            padding: {
+              top: 80,    // Espacio para la barra de búsqueda
+              right: 50,
+              bottom: 50,
+              left: 50
+            }
+          })
+          
+          // Asegurar un zoom mínimo y máximo
+          const listener = (window as any).google.maps.event.addListenerOnce(mapInstanceRef.current, 'bounds_changed', () => {
+            const zoom = mapInstanceRef.current.getZoom()
+            if (zoom > 16) {
+              mapInstanceRef.current.setZoom(16) // Zoom máximo para no estar demasiado cerca
+            } else if (zoom < 10) {
+              mapInstanceRef.current.setZoom(10) // Zoom mínimo para no estar demasiado lejos
+            }
+          })
+        }
       }
       
       // Verificar si Google Maps ya está cargado
@@ -337,17 +419,24 @@ export function ServiciosPage() {
       setSearchingPlaces(true)
       setHasSearched(true)
       
-      // Si tenemos la ubicación del usuario, buscar cerca de ella
-      let searchQuery = category
-      if (userLocation) {
-        searchQuery = `${category} near ${userLocation.lat},${userLocation.lng}`
-      }
-      
-      setSearchQuery(searchQuery)
+      setSearchQuery(category)
       try {
-        await searchPlaces(searchQuery)
+        let searchResult
+        // Si tenemos la ubicación del usuario, buscar con radio progresivo
+        if (userLocation) {
+          searchResult = await searchPlaces(category, userLocation, searchRadius)
+        } else {
+          // Búsqueda general sin limitación geográfica
+          searchResult = await searchPlaces(category)
+        }
+        
+        // Actualizar el radio actual para mostrarlo en el mapa
+        if (searchResult.radius && userLocation) {
+          setSearchRadius(searchResult.radius)
+        }
+        
         // Abrir el drawer cuando se obtienen resultados
-        if (!isDrawerOpen) {
+        if (!isDrawerOpen && searchResult.results.length > 0) {
           setIsDrawerOpen(true)
         }
       } finally {
@@ -363,6 +452,38 @@ export function ServiciosPage() {
     // Ejecutar búsqueda automáticamente si hay una categoría seleccionada
     if (newCategory) {
       await handleSearch(newCategory)
+    }
+  }
+
+  // Nueva función para manejar la selección en el autocompletado
+  const handleAutocompleteSelect = async (value: string, label: string) => {
+    setSelectedCategory(value)
+    setInputValue(label)
+    setSearchRadius(SEARCH_CONFIG.DEFAULT_RADIUS) // Reiniciar el radio al valor inicial
+    setOpen(false)
+    
+    // Ejecutar búsqueda automáticamente
+    if (value) {
+      await handleSearch(value)
+    }
+  }
+
+  // Función para manejar la búsqueda personalizada (cuando el usuario escribe algo)
+  const handleCustomSearch = async () => {
+    if (inputValue.trim()) {
+      setSelectedCategory(inputValue.trim())
+      setSearchRadius(SEARCH_CONFIG.DEFAULT_RADIUS) // Reiniciar el radio al valor inicial
+      setOpen(false)
+      // Usar la misma función handleSearch que utiliza geolocalización y radio progresivo
+      await handleSearch(inputValue.trim())
+    }
+  }
+
+  // Función para manejar el Enter en el input
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && inputValue.trim()) {
+      e.preventDefault()
+      handleCustomSearch()
     }
   }
 
@@ -449,31 +570,103 @@ export function ServiciosPage() {
         <div className={styles["servicios-page__search-container"]}>
           <div className={styles["servicios-page__select-container"]}>
             <Search className={styles["servicios-page__search-icon"]} />
-            <select
-              value={selectedCategory}
-              onChange={handleCategoryChange}
-              className={styles["servicios-page__select"]}
-              disabled={loadingCategories || searchingPlaces}
-            >
-              {loadingCategories ? (
-                <option value="">Cargando categorías...</option>
-              ) : (
-                categories.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))
-              )}
-            </select>
+            
+            {/* Autocompletado personalizado */}
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className={cn(
+                    styles["servicios-page__select"],
+                    "justify-between text-left font-normal"
+                  )}
+                  disabled={loadingCategories || searchingPlaces}
+                >
+                  {inputValue || "Buscar categoría o lugar específico..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <Command>
+                  <CommandInput 
+                    placeholder="Buscar categoría o escribir lugar específico..." 
+                    value={inputValue}
+                    onValueChange={setInputValue}
+                    onKeyDown={handleKeyDown}
+                  />
+                  <CommandList>
+                    <CommandEmpty>
+                      <div className="p-2 text-center">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          No se encontró la categoría. 
+                        </p>
+                        <Button 
+                          size="sm" 
+                          onClick={handleCustomSearch}
+                          disabled={!inputValue.trim()}
+                        >
+                          <Search className="w-4 h-4 mr-2" />
+                          Buscar "{inputValue}"
+                        </Button>
+                      </div>
+                    </CommandEmpty>
+                    <CommandGroup heading="Categorías disponibles">
+                      {!loadingCategories && categories
+                        .filter(category => category.value !== "") // Filtrar la opción vacía
+                        .map((category) => {
+                          const IconComponent = category.icon
+                          return (
+                            <CommandItem
+                              key={category.value}
+                              value={category.label}
+                              onSelect={() => handleAutocompleteSelect(category.value, category.label)}
+                            >
+                              <IconComponent className="mr-2 h-4 w-4" />
+                              {category.label}
+                              <Check
+                                className={cn(
+                                  "ml-auto h-4 w-4",
+                                  selectedCategory === category.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          )
+                        })}
+                    </CommandGroup>
+                    {inputValue && inputValue.trim() && !categories.some(cat => 
+                      cat.label.toLowerCase().includes(inputValue.toLowerCase())
+                    ) && (
+                      <CommandGroup heading="Búsqueda personalizada">
+                        <CommandItem
+                          value={inputValue}
+                          onSelect={handleCustomSearch}
+                        >
+                          <Search className="mr-2 h-4 w-4" />
+                          Buscar "{inputValue}"
+                        </CommandItem>
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            
             <ChevronDown className={styles["servicios-page__select-arrow"]} />
           </div>
         </div>
         
         {/* Loading indicator para búsqueda */}
-        {searchingPlaces && (
+        {(searchingPlaces || !isLocationReady) && (
           <div className={styles["servicios-page__search-loading"]}>
             <div className={styles["servicios-page__search-loading-spinner"]}></div>
-            <span>Buscando lugares cercanos...</span>
+            <span>
+              {!isLocationReady 
+                ? "Obteniendo tu ubicación..."
+                : "Buscando lugares cercanos..."
+              }
+            </span>
           </div>
         )}
         
@@ -486,10 +679,25 @@ export function ServiciosPage() {
         )} */}
         
         {/* Mostrar confirmación de ubicación obtenida */}
-        {userLocation && !locationError && (
+        {userLocation && !locationError && isLocationReady && (
           <div className={styles["servicios-page__location-success"]}>
             <MapPin className="w-4 h-4 mr-2" />
-            <span>Ubicación obtenida. Las búsquedas mostrarán lugares cercanos a ti.</span>
+            <span>
+              {isRefreshingWithLocation || (searchingPlaces && userLocation)
+                ? "Buscando lugares cercanos. Expandiendo radio si es necesario..."
+                : actualRadius 
+                  ? `Ubicación obtenida. Mostrando lugares en un radio de ${actualRadius / 1000}km.`
+                  : `Ubicación obtenida. Buscando lugares en un radio de ${searchRadius / 1000}km.`
+              }
+            </span>
+          </div>
+        )}
+
+        {/* Mostrar si se está usando búsqueda general (sin geolocalización) */}
+        {isLocationReady && locationError && hasSearched && (
+          <div className={styles["servicios-page__location-success"]}>
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span>Búsqueda general (sin ubicación específica)</span>
           </div>
         )}
       </div>
@@ -552,6 +760,18 @@ export function ServiciosPage() {
 
         {/* Drawer Content */}
         <div className={styles["servicios-page__drawer-content"]}>
+          {/* Mensaje informativo sobre búsqueda expandida */}
+          {actualRadius && actualRadius > SEARCH_CONFIG.DEFAULT_RADIUS && locations.length > 0 && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2 text-amber-600" />
+                <span className="text-sm text-amber-800">
+                  Se expandió la búsqueda a {actualRadius / 1000}km para encontrar más lugares cercanos.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Error Message */}
           {error && (
             <div className={styles["servicios-page__error-container"]}>

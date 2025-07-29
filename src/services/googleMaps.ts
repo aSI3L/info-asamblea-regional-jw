@@ -1,11 +1,22 @@
 import type { GoogleMapsLocation } from "@/types"
 
 export class GoogleMapsService {
-  static async searchPlaces(query: string): Promise<GoogleMapsLocation[]> {
+  static async searchPlaces(
+    query: string, 
+    location?: { lat: number; lng: number }, 
+    radius: number = 5000 // 5km por defecto
+  ): Promise<GoogleMapsLocation[]> {
     try {
-      const response = await fetch(
-        `/api/places/search?query=${encodeURIComponent(query)}`
-      )
+      let apiUrl = `/api/places/search?query=${encodeURIComponent(query)}`
+      
+      // Agregar parámetros de ubicación y radio si están disponibles
+      if (location) {
+        apiUrl += `&lat=${location.lat}&lng=${location.lng}&radius=${radius}`
+      }
+      
+      console.log(`[Service] URL de búsqueda: ${apiUrl}`)
+      
+      const response = await fetch(apiUrl)
 
       if (!response.ok) {
         throw new Error("Failed to search places")
