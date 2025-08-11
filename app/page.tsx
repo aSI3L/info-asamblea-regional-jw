@@ -1,11 +1,9 @@
-import { HeroSection } from "../src/components/home/HeroSection/HeroSection"
-import { EventsCarousel } from "../src/components/home/EventsCarousel/EventsCarousel"
+import { HomePage } from "@/components/pages/Home/HomePage";
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <main className="min-h-screen bg-nature-light">
-      <HeroSection />
-      <EventsCarousel />
+    <main className="min-h-screen bg-primaryColor">
+      <HomePage />
     </main>
   )
 }

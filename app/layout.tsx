@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Header } from '../src/components/common/Header'
 import { ConditionalHeader } from '../src/components/common/ConditionalHeader/ConditionalHeader'
+import '../app/globals.css'
+import { DataLoader } from '@/components/common/DataLoader/DataLoader'
 
 export const metadata: Metadata = {
-  title: '"Adoración Pura" Asamblea Regional 2025',
+  title: 'Asamblea Regional de los Testigos de Jehová',
   description: '',
 }
 
@@ -17,7 +18,9 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <ConditionalHeader />
-        {children}
+        <DataLoader>
+          {children}
+        </DataLoader>
       </body>
     </html>
   )
