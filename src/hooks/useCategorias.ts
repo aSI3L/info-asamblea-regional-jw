@@ -11,9 +11,6 @@ export const useCategorias = () => {
     useEffect(() => {
         void getCategorias();
     }, []);
-
-    useEffect(() => {
-        console.log(categorias)
-    }, [categorias]);
+    
     return { categorias, loadingCategorias };
 }
