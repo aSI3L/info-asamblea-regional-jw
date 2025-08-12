@@ -1,0 +1,1 @@
+export { MapaInternoPage } from "./MapaInternoPage"
