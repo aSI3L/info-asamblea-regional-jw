@@ -31,3 +31,13 @@ export async function loadMapLayers({ edificioId, nivel }: {
   });
   return capas;
 }
+// Lee el nombre de la capa activa para un nivel
+export async function getActiveLayer({ edificioId, nivel }: { edificioId: string; nivel: string }) {
+  const nivelRef = doc(db, "mapas", `${edificioId}_${nivel}`);
+  const snap = await getDoc(nivelRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    return data.capaActiva || null;
+  }
+  return null;
+}

@@ -8,6 +8,7 @@ import type { Node, Vector, PointOfInterest } from "@/types/mapas.type";
 
 // Componente principal de la página
 import { edificiosService } from "@/services/index.generic.service";
+import { getCapaActivaDeNivel } from "@/services/capa-activa.service";
 
 export function MapaInternoPage() {
   const [edificios, setEdificios] = useState<{ id: string; nombre: string }[]>([]);
@@ -25,7 +26,7 @@ export function MapaInternoPage() {
     });
   }, []);
 
-  // Cargar todos los POIs de todos los niveles de la capa 1 al seleccionar edificio
+  // Cargar todos los POIs de la capa activa REAL de cada nivel al seleccionar edificio
   useEffect(() => {
     setPois([]); setFrom(""); setTo("");
     if (!edificioId) return;
@@ -33,8 +34,10 @@ export function MapaInternoPage() {
       const niveles = Object.keys(ed.planos || {});
       let allPois: { node: string; name: string; nivel: string }[] = [];
       for (const nivel of niveles) {
+        // Leer la capa activa REAL del nivel desde Firestore
+        const capaActiva = await getCapaActivaDeNivel(edificioId, nivel);
         const capasObj = await loadMapLayers({ edificioId, nivel });
-        const data = capasObj["Capa 1"];
+        const data = capasObj[capaActiva];
         if (data?.pois) {
           allPois = allPois.concat(data.pois.map((p: any) => ({ node: p.node, name: p.name, nivel })));
         }
@@ -147,14 +150,17 @@ export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
   useEffect(() => {
     async function fetchAllLevels() {
       const ed = await import("@/services/index.generic.service").then(m => m.edificiosService.getById(edificioId));
-  if (!ed) return;
-  const niveles = Object.keys(ed.planos || {});
+      if (!ed) return;
+      const niveles = Object.keys(ed.planos || {});
       setAllLevels(niveles);
       setPlanos(ed.planos || {});
       const dataByLevel: Record<string, { nodes: Node[]; connections: Vector[]; pois: PointOfInterest[] }> = {};
       for (const nivel of niveles) {
+        // Obtener la capa activa directamente desde Firestore
+        const capaActiva = await getCapaActivaDeNivel(edificioId, nivel);
         const capasObj = await loadMapLayers({ edificioId, nivel });
-        const data = capasObj["Capa 1"];
+        console.log(`Nivel: ${nivel}, capaActiva: '${capaActiva}'`, capasObj);
+        const data = capasObj[capaActiva];
         if (data) {
           dataByLevel[nivel] = {
             nodes: data.nodes || [],
