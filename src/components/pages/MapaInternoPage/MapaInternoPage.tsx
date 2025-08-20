@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react";
+import { motion, useMotionValue, useAnimationFrame } from "framer-motion";
 import { loadMapLayers } from "@/services/map-graph.service";
 import { Button } from "@/components/ui/button";
 import type { Node, Vector, PointOfInterest } from "@/types/mapas.type";
@@ -7,29 +8,36 @@ import type { Node, Vector, PointOfInterest } from "@/types/mapas.type";
 // Dijkstra implementation
 
 // Componente principal de la página
-import { edificiosService } from "@/services/index.generic.service";
+import { edificiosService, infoPrincipalService } from "@/services/index.generic.service";
 import { getCapaActivaDeNivel } from "@/services/capa-activa.service";
 
 export function MapaInternoPage() {
-  const [edificios, setEdificios] = useState<{ id: string; nombre: string }[]>([]);
   const [edificioId, setEdificioId] = useState("");
+  const [loadingEdificio, setLoadingEdificio] = useState(true);
   const [pois, setPois] = useState<{ node: string; name: string; nivel: string }[]>([]);
+  const [loadingPois, setLoadingPois] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [showVisor, setShowVisor] = useState(false);
 
-  // Cargar edificios al montar
+  // Al montar, obtener el buildingId de info-principal y setearlo como edificioId
   useEffect(() => {
-    edificiosService.getAll().then((eds: any[] | null) => {
-      if (!eds) return setEdificios([]);
-      setEdificios(eds.map(e => ({ id: e.id, nombre: e.nombre })));
-    });
+    async function fetchBuildingId() {
+      setLoadingEdificio(true);
+      const info = await infoPrincipalService.getAll();
+      if (info && info.length > 0 && info[0].buildingId) {
+        setEdificioId(info[0].buildingId);
+      }
+      setLoadingEdificio(false);
+    }
+    fetchBuildingId();
   }, []);
 
   // Cargar todos los POIs de la capa activa REAL de cada nivel al seleccionar edificio
   useEffect(() => {
     setPois([]); setFrom(""); setTo("");
     if (!edificioId) return;
+    setLoadingPois(true);
     edificiosService.getById(edificioId).then(async (ed: any) => {
       const niveles = Object.keys(ed.planos || {});
       let allPois: { node: string; name: string; nivel: string }[] = [];
@@ -43,6 +51,7 @@ export function MapaInternoPage() {
         }
       }
       setPois(allPois);
+      setLoadingPois(false);
     });
   }, [edificioId]);
 
@@ -52,32 +61,39 @@ export function MapaInternoPage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto bg-zinc-900 rounded-lg shadow p-6 mt-6 border border-zinc-700">
-      <h2 className="text-2xl font-bold mb-4 text-white">Buscar ruta óptima (multi-nivel)</h2>
-      <form onSubmit={handleCalcular} className="space-y-4">
-        <div>
-          <label className="block mb-1 font-semibold text-zinc-200">Edificio:</label>
-          <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={edificioId} onChange={e => setEdificioId(e.target.value)} required>
-            <option value="">Seleccione un edificio</option>
-            {edificios.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-          </select>
+        <div
+          className="max-w-xl mx-auto bg-zinc-900 rounded-lg shadow p-6 mt-6 border border-zinc-700"
+          style={{ marginTop: 'clamp(110px, 15vw, 140px)' }}
+        >
+        <h2
+          className="text-2xl font-bold mb-4 text-white text-center"
+          style={{ width: '100%' }}
+        >
+          ¿A donde quieres ir?
+        </h2>
+      {(loadingEdificio || loadingPois) ? (
+        <div className="flex items-center justify-center h-32">
+          <span className="text-zinc-300">Cargando ubicaciones...</span>
         </div>
-        <div>
-          <label className="block mb-1 font-semibold text-zinc-200">Desde:</label>
-          <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={from} onChange={e => setFrom(e.target.value)} required>
-            <option value="">Seleccione origen</option>
-            {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block mb-1 font-semibold text-zinc-200">Hasta:</label>
-          <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={to} onChange={e => setTo(e.target.value)} required>
-            <option value="">Seleccione destino</option>
-            {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
-          </select>
-        </div>
-        <Button className="w-full bg-zinc-100 text-zinc-900 font-bold hover:bg-white" type="submit" disabled={!from || !to || !edificioId}>Calcular ruta</Button>
-      </form>
+      ) : (
+        <form onSubmit={handleCalcular} className="space-y-4">
+          <div>
+            <label className="block mb-1 font-semibold text-zinc-200">Desde:</label>
+            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={from} onChange={e => setFrom(e.target.value)} required>
+              <option value="">Seleccione origen</option>
+              {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 font-semibold text-zinc-200">Hasta:</label>
+            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={to} onChange={e => setTo(e.target.value)} required>
+              <option value="">Seleccione destino</option>
+              {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
+            </select>
+          </div>
+          <Button className="w-full bg-zinc-100 text-zinc-900 font-bold hover:bg-white" type="submit" disabled={!from || !to || !edificioId}>Calcular ruta</Button>
+        </form>
+      )}
       {showVisor && from && to && (
         <div className="mt-8">
           <MapVisor edificioId={edificioId} nivel="" capa="Capa 1" from={from} to={to} />
@@ -139,10 +155,102 @@ interface MapVisorProps {
 
 
 export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
+  // ...existing code...
+  // Nueva animación de flecha: recorre el camino, desaparece al llegar, vuelve a empezar
+  function getArrowSvg(path: string[], levelData: any, nivel: string, animPos: number) {
+    if (!path || path.length < 2) return null;
+    const allNodes = Object.values(levelData).flatMap((l: any) => l.nodes);
+    const points = path.map(id => allNodes.find((n: any) => n.node === id)).filter(Boolean);
+    if (points.length < 2) return null;
+    // Calcular longitudes de cada segmento
+    let total = 0;
+    const segLengths: number[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+      segLengths.push(len);
+      total += len;
+    }
+    if (total === 0) return null;
+    // Si animPos >= 1, no mostrar flecha (bucle limpio)
+  if (animPos <= 0 || animPos >= 0.98) return null;
+    // Calcular en qué segmento está la flecha
+    let dist = animPos * total;
+    let segIdx = 0;
+    while (segIdx < segLengths.length && dist > segLengths[segIdx]) {
+      dist -= segLengths[segIdx];
+      segIdx++;
+    }
+    if (segIdx >= segLengths.length) return null;
+    const a = points[segIdx];
+    const b = points[segIdx + 1];
+    if (!a || !b) return null;
+    // Solo mostrar la flecha si ambos nodos están en este nivel
+    let nivelA = null, nivelB = null;
+    for (const [nivelK, dataK] of Object.entries(levelData)) {
+      if (dataK && Array.isArray((dataK as any).nodes)) {
+        if ((dataK as any).nodes.some((n: any) => n.node === a.node)) nivelA = nivelK;
+        if ((dataK as any).nodes.some((n: any) => n.node === b.node)) nivelB = nivelK;
+      }
+    }
+    if (nivelA !== nivel || nivelB !== nivel) return null;
+    let t = segLengths[segIdx] === 0 ? 0 : dist / segLengths[segIdx];
+    t = Math.max(0, Math.min(1, t));
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+    return (
+      <g filter="url(#gmaps-arrow-shadow)">
+        <polygon
+          points="0,-18 32,0 0,18"
+          fill="#22c55e"
+          stroke="#fff"
+          strokeWidth={3}
+          opacity={0.98}
+          transform={`translate(${x},${y}) rotate(${angle})`}
+          style={{ transition: 'all 0.2s' }}
+        />
+      </g>
+    );
+  }
   const [allLevels, setAllLevels] = useState<string[]>([]);
   const [levelData, setLevelData] = useState<Record<string, { nodes: Node[]; connections: Vector[]; pois: PointOfInterest[] }>>({});
   const [planos, setPlanos] = useState<Record<string, string>>({});
   const [path, setPath] = useState<string[]>([]);
+  // Valor animado para la flecha
+  const t = useMotionValue(0);
+  const [arrowT, setArrowT] = useState(0);
+  // Duración de la animación en segundos
+  const [arrowDuration, setArrowDuration] = useState(2);
+
+  // Calcular duración según la longitud del camino
+  useEffect(() => {
+    if (!path.length) return;
+    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    }
+    if (total === 0) return;
+    setArrowDuration(total / 180); // px/seg
+  }, [path, levelData]);
+
+  // Animación de la flecha con Framer Motion
+  useEffect(() => {
+    let start = performance.now();
+    let stopped = false;
+    function animate(now: number) {
+      if (stopped) return;
+      const elapsed = (now - start) / 1000;
+      let localT = (elapsed % arrowDuration) / arrowDuration;
+      if (localT >= 1) localT = 0;
+      t.set(localT);
+      setArrowT(localT);
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+    return () => { stopped = true; };
+  }, [arrowDuration, t]);
   const [animPos, setAnimPos] = useState(0); // 0 a 1, posición a lo largo del path
   const animRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -193,36 +301,22 @@ export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
   useEffect(() => {
     if (!path.length) return;
     setAnimPos(0);
-    let start: number | null = null;
     let running = true;
     const speed = 180; // px por segundo
-    let lastCycle = 0;
+    let total = 0;
+    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+    for (let i = 0; i < points.length - 1; i++) {
+      total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    }
+    if (total === 0) return;
+    let start = performance.now();
     function step(ts: number) {
       if (!running) return;
-      if (start === null) start = ts;
-      // Calcular longitud total de la ruta
-      const allNodes = Object.values(levelData).flatMap(l => l.nodes);
-      const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
-      let total = 0;
-      for (let i = 0; i < points.length - 1; i++) {
-        total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
-      }
-      if (total === 0) return;
-      // Avance en píxeles
       const elapsed = (ts - start) / 1000;
-      let distTotal = elapsed * speed;
-      let cycle = Math.floor(distTotal / total);
-      if (cycle > lastCycle) {
-        // Reiniciar el tiempo base para evitar acumulación de error
-        start = ts;
-        lastCycle = cycle;
-        setAnimPos(0);
-        requestAnimationFrame(step);
-        return;
-      }
-      let dist = distTotal - (cycle * total);
-      let pos = dist / total;
-      setAnimPos(pos);
+      const cycleTime = total / speed;
+      const t = (elapsed % cycleTime) / cycleTime;
+      setAnimPos(t);
       requestAnimationFrame(step);
     }
     const raf = requestAnimationFrame(step);
@@ -273,101 +367,91 @@ export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
           if (n1 && n2) pathSegments.push({ from: n1, to: n2 });
         }
         if (pathSegments.length === 0) return null;
-        const planoUrl = planos[nivel] || null;
+  const planoUrl = planos[String(nivel)] || null;
+  console.log('DEBUG planoUrl', { planos, nivel, planoUrl });
         return (
           <div key={nivel} className="mb-6">
             <h3 className="font-bold mb-2 text-zinc-200">Plano nivel {nivel}</h3>
             <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-2 w-full max-w-2xl mx-auto">
               <div style={{ width: '100%', aspectRatio: '1 / 1' }}>
                 <svg viewBox="0 0 800 800" width="100%" height="100%" style={{ background: '#18181b', borderRadius: 8, display: 'block', width: '100%', height: '100%' }} preserveAspectRatio="xMidYMid meet">
-                <defs>
-                  <linearGradient id="gmaps-blue" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#4285F4" />
-                    <stop offset="100%" stopColor="#0a58ca" />
-                  </linearGradient>
-                  <filter id="gmaps-glow" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="7" result="coloredBlur"/>
-                    <feMerge>
-                      <feMergeNode in="coloredBlur"/>
-                      <feMergeNode in="SourceGraphic"/>
-                    </feMerge>
-                  </filter>
-                  <filter id="gmaps-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.4"/>
-                  </filter>
-                  <style>{`
-                    .gmaps-dash {
-                      stroke-dasharray: 16 12;
-                      stroke-dashoffset: 0;
-                      animation: dashmove 1.2s linear infinite;
-                    }
-                    @keyframes dashmove {
-                      to { stroke-dashoffset: -28; }
-                    }
-                  `}</style>
-                </defs>
-                {planoUrl && (
-                  <image href={planoUrl} x={0} y={0} width={800} height={800} style={{ pointerEvents: 'none' }} />
-                )}
-                {pathSegments.map((seg, idx) => (
-                  <g key={idx}>
-                    <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#4285F4" strokeWidth={12} opacity={0.5} filter="url(#gmaps-glow)" />
-                    <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="url(#gmaps-blue)" strokeWidth={7} />
-                    <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#fff" strokeWidth={3.5} />
-                    <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#fff" strokeWidth={2.5} className="gmaps-dash" opacity={0.7} />
-                  </g>
-                ))}
-                {/* Flecha animada: recorre toda la ruta suavemente */}
-                {(() => {
-                  // ...existing code de la flecha animada...
-                  const allNodes = Object.values(levelData).flatMap(l => l.nodes);
-                  const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
-                  if (points.length < 2) return null;
-                  let total = 0;
-                  const segLengths: number[] = [];
-                  for (let i = 0; i < points.length - 1; i++) {
-                    const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
-                    segLengths.push(len);
-                    total += len;
-                  }
-                  if (animPos <= 0 || animPos >= 1) return null;
-                  let dist = animPos * total;
-                  let segIdx = 0;
-                  if (dist < 0) dist = 0;
-                  if (dist > total) dist = total;
-                  while (segIdx < segLengths.length && dist > segLengths[segIdx]) {
-                    dist -= segLengths[segIdx];
-                    segIdx++;
-                  }
-                  if (segIdx >= segLengths.length) segIdx = segLengths.length - 1;
-                  const a = points[segIdx];
-                  const b = points[segIdx + 1];
-                  if (!a || !b) return null;
-                  let nivelA = null, nivelB = null;
-                  for (const [nivelK, dataK] of Object.entries(levelData)) {
-                    if (dataK.nodes.some(n => n.node === a.node)) nivelA = nivelK;
-                    if (dataK.nodes.some(n => n.node === b.node)) nivelB = nivelK;
-                  }
-                  if (nivelA !== nivel || nivelB !== nivel) return null;
-                  let t = segLengths[segIdx] === 0 ? 0 : dist / segLengths[segIdx];
-                  t = Math.max(0, Math.min(1, t));
-                  const x = a.x + (b.x - a.x) * t;
-                  const y = a.y + (b.y - a.y) * t;
-                  const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-                  return (
-                    <g filter="url(#gmaps-arrow-shadow)">
-                      <polygon
-                        points="0,-18 32,0 0,18"
-                        fill="#4285F4"
-                        stroke="#fff"
-                        strokeWidth={3}
-                        opacity={0.98}
-                        transform={`translate(${x},${y}) rotate(${angle})`}
-                        style={{ transition: 'all 0.2s' }}
-                      />
+                  <defs>
+                    <linearGradient id="gmaps-blue" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#4285F4" />
+                      <stop offset="100%" stopColor="#0a58ca" />
+                    </linearGradient>
+                    <filter id="gmaps-glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="7" result="coloredBlur"/>
+                      <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                    <filter id="gmaps-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.4"/>
+                    </filter>
+                    <style>{`
+                      .gmaps-dash {
+                        stroke-dasharray: 16 12;
+                        stroke-dashoffset: 0;
+                        animation: dashmove 1.2s linear infinite;
+                      }
+                      @keyframes dashmove {
+                        to { stroke-dashoffset: -28; }
+                      }
+                    `}</style>
+                  </defs>
+                  {planoUrl && (
+                    <image href={planoUrl} x={0} y={0} width={800} height={800} style={{ pointerEvents: 'none' }} />
+                  )}
+                  {/* Camino: líneas verdes y puntos */}
+                  {pathSegments.map((seg, idx) => (
+                    <g key={idx}>
+                      {/* Línea principal verde */}
+                      <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#22c55e" strokeWidth={10} opacity={0.5} filter="url(#gmaps-glow)" />
+                      <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#22c55e" strokeWidth={5} />
+                      {/* Puntos en cada nodo del segmento */}
+                      <circle cx={seg.from.x} cy={seg.from.y} r={10} fill="#fff" stroke="#22c55e" strokeWidth={4} />
+                      <circle cx={seg.from.x} cy={seg.from.y} r={4} fill="#22c55e" />
+                      {/* Si es el último segmento, dibuja punto en el destino también (antes del icono GPS) */}
+                      {idx === pathSegments.length - 1 && (
+                        <>
+                          <circle cx={seg.to.x} cy={seg.to.y} r={10} fill="#fff" stroke="#22c55e" strokeWidth={4} />
+                          <circle cx={seg.to.x} cy={seg.to.y} r={4} fill="#22c55e" />
+                        </>
+                      )}
                     </g>
-                  );
-                })()}
+                  ))}
+                  {/* Icono de ubicación: pin rojo solo en el nivel destino */}
+                  {(() => {
+                    if (!path || path.length === 0) return null;
+                    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+                    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+                    if (points.length < 2) return null;
+                    const dest = points[points.length - 1];
+                    // Buscar el nivel del nodo destino
+                    let nivelDestino = null;
+                    for (const [nivelK, dataK] of Object.entries(levelData)) {
+                      if (dataK.nodes.some(n => n.node === dest.node)) nivelDestino = nivelK;
+                    }
+                    if (nivelDestino !== nivel) return null;
+                    // SVG pin rojo estilo Google Maps, con la punta inferior apuntando al centro del nodo
+                    // El pin tiene altura 40, la punta está en (0,40), así que ajustamos el translate
+                    return (
+                      <g transform={`translate(${dest.x},${dest.y - 40})`}>
+                        <g>
+                          <ellipse cx={0} cy={68} rx={18} ry={10} fill="#cbd5e1" opacity={0.7} />
+                          <path d="M 0 0 C 18 0 18 24 0 40 C -18 24 -18 0 0 0 Z" fill="#ef4444" stroke="#333" strokeWidth={4} />
+                          <circle cx={0} cy={12} r={10} fill="#cbd5e1" stroke="#333" strokeWidth={4} />
+                          <circle cx={0} cy={12} r={6} fill="#cbd5e1" />
+                        </g>
+                      </g>
+                    );
+                  })()}
+                  {/* Flecha animada con Framer Motion: recorre el camino, desaparece al llegar, vuelve a empezar */}
+                  <motion.g>
+                    {getArrowSvg(path, levelData, nivel, arrowT)}
+                  </motion.g>
                 </svg>
               </div>
             </div>
