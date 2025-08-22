@@ -14,11 +14,13 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+  // Use server-only API key to avoid exposing it to the client.
+  // Expect a variable named GOOGLE_MAPS_API_KEY (not prefixed with NEXT_PUBLIC_)
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'Google Maps API key not configured' },
+      { error: 'Google Maps API key not configured on the server' },
       { status: 500 }
     )
   }

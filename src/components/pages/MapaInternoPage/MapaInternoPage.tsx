@@ -8,7 +8,8 @@ import type { Node, Vector, PointOfInterest } from "@/types/mapas.type";
 // Dijkstra implementation
 
 // Componente principal de la página
-import { edificiosService, infoPrincipalService } from "@/services/index.generic.service";
+import { edificiosService } from "@/services/index.generic.service";
+import { useInfoPrincipal } from "@/hooks/useInfoPrincipal";
 import { getCapaActivaDeNivel } from "@/services/capa-activa.service";
 
 export function MapaInternoPage() {
@@ -20,18 +21,18 @@ export function MapaInternoPage() {
   const [to, setTo] = useState("");
   const [showVisor, setShowVisor] = useState(false);
 
-  // Al montar, obtener el buildingId de info-principal y setearlo como edificioId
+  // Usar el hook compartido que además establece las variables CSS de color
+  const { infoPrincipal, loadingInfoPrincipal } = useInfoPrincipal();
+
+  // Al cambiar infoPrincipal, obtener el buildingId
   useEffect(() => {
-    async function fetchBuildingId() {
-      setLoadingEdificio(true);
-      const info = await infoPrincipalService.getAll();
-      if (info && info.length > 0 && info[0].buildingId) {
-        setEdificioId(info[0].buildingId);
-      }
-      setLoadingEdificio(false);
+    setLoadingEdificio(true);
+    if (infoPrincipal && (infoPrincipal as any).buildingId) {
+      setEdificioId((infoPrincipal as any).buildingId);
     }
-    fetchBuildingId();
-  }, []);
+    setLoadingEdificio(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [infoPrincipal, loadingInfoPrincipal]);
 
   // Cargar todos los POIs de la capa activa REAL de cada nivel al seleccionar edificio
   useEffect(() => {
@@ -60,38 +61,51 @@ export function MapaInternoPage() {
     setShowVisor(true);
   };
 
-  return (
+    return (
         <div
-          className="max-w-xl mx-auto bg-zinc-900 rounded-lg shadow p-6 mt-6 border border-zinc-700"
+          className="max-w-xl mx-auto rounded-lg shadow-lg p-6 mt-6"
           style={{ marginTop: 'clamp(110px, 15vw, 140px)' }}
         >
-        <h2
-          className="text-2xl font-bold mb-4 text-white text-center"
-          style={{ width: '100%' }}
-        >
-          ¿A donde quieres ir?
-        </h2>
+  <div className="w-full rounded-lg p-6 bg-white"
+       style={{ border: '1px solid var(--secondary-color)' }}>
+    <h2 className="text-2xl font-bold mb-4 text-center text-gray-900">¿A dónde quieres ir?</h2>
       {(loadingEdificio || loadingPois) ? (
         <div className="flex items-center justify-center h-32">
-          <span className="text-zinc-300">Cargando ubicaciones...</span>
+          <span className="text-gray-600">Cargando ubicaciones...</span>
         </div>
       ) : (
         <form onSubmit={handleCalcular} className="space-y-4">
           <div>
-            <label className="block mb-1 font-semibold text-zinc-200">Desde:</label>
-            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={from} onChange={e => setFrom(e.target.value)} required>
+            <label className="block mb-2 text-sm font-normal text-gray-700">Desde</label>
+            <select
+              className="w-full rounded-lg p-2.5 text-sm border border-gray-300 bg-white text-gray-900 shadow-sm focus:ring-2 focus:ring-[var(--secondary-color)] focus:border-[var(--secondary-color)]"
+              value={from}
+              onChange={e => setFrom(e.target.value)}
+              required
+            >
               <option value="">Seleccione origen</option>
               {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
             </select>
           </div>
           <div>
-            <label className="block mb-1 font-semibold text-zinc-200">Hasta:</label>
-            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={to} onChange={e => setTo(e.target.value)} required>
+            <label className="block mb-2 text-sm font-normal text-gray-700">Hasta</label>
+            <select
+              className="w-full rounded-lg p-2.5 text-sm border border-gray-300 bg-white text-gray-900 shadow-sm focus:ring-2 focus:ring-[var(--secondary-color)] focus:border-[var(--secondary-color)]"
+              value={to}
+              onChange={e => setTo(e.target.value)}
+              required
+            >
               <option value="">Seleccione destino</option>
               {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
             </select>
           </div>
-          <Button className="w-full bg-zinc-100 text-zinc-900 font-bold hover:bg-white" type="submit" disabled={!from || !to || !edificioId}>Calcular ruta</Button>
+          <Button
+            className="w-full text-sm font-medium rounded-lg px-5 py-2.5 shadow-md transition-transform disabled:opacity-60 bg-[var(--accent-color)] text-white hover:brightness-105"
+            type="submit"
+            disabled={!from || !to || !edificioId}
+          >
+            Calcular ruta
+          </Button>
         </form>
       )}
       {showVisor && from && to && (
@@ -100,6 +114,7 @@ export function MapaInternoPage() {
         </div>
       )}
     </div>
+  </div>
   );
 }
 function dijkstra(

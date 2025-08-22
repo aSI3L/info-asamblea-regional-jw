@@ -124,7 +124,10 @@ body {
   * {
     @apply border-border;
   }
+  /* Force light background and dark text to ensure pages render with white background */
   body {
-    @apply bg-background text-foreground;
+    background-color: #ffffff !important;
+    color: #111827 !important; /* text-gray-900 */
+    @apply bg-white;
   }
 }
