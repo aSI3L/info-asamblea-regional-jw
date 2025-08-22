@@ -43,3 +43,30 @@ export interface StairConnection {
   escaleraOrigen: string;
   escaleraDestino: string;
 } 
+
+// Types for Google Maps integration
+export interface GoogleMapsLocation {
+  place_id: string;
+  name: string;
+  geometry: {
+    location: {
+      lat: number;
+      lng: number;
+    };
+  };
+  formatted_address?: string;
+  vicinity?: string;
+  types?: string[];
+  rating?: number;
+  user_ratings_total?: number;
+  [key: string]: any;
+}
+
+// Generic Dijkstra route return type
+export interface DijkstraRoute {
+  path: Array<string | Node>;
+  distance: number;
+  nodes?: Node[];
+  edges?: Vector[];
+  [key: string]: any;
+}

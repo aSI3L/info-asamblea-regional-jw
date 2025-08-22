@@ -21,10 +21,8 @@
 
 /* Buscador fijo en la parte superior */
 .servicios-page__search {
-  position: fixed;
-  top: 65px; /* Posicionar debajo del header */
-  left: 0;
-  right: 0;
+  position: relative;
+  top: 0; /* Posicionar debajo del header */
   z-index: 50;
   background-color: transparent;
   backdrop-filter: blur(16px);
@@ -48,9 +46,6 @@
   
   .servicios-page__select-container {
     width: 100%;
-  }
-  .servicios-page__search {
-    top: 105px; /* Posicionar debajo del header */
   }
 }
 

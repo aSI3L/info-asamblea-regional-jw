@@ -38,12 +38,6 @@ export function Header({
               Inicio
             </Link>
             <Link 
-              href="/servicios" 
-              className={pathname === '/servicios' ? styles.active : ''}
-            >
-              Servicios
-            </Link>
-            <Link 
               href="/consultas" 
               className={pathname === '/consultas' ? styles.active : ''}
             >
@@ -54,6 +48,12 @@ export function Header({
               className={pathname === '/mapa-interno' ? styles.active : ''}
             >
               Mapa Interno
+            </Link>
+            <Link 
+              href="/servicios" 
+              className={pathname === '/servicios' ? styles.active : ''}
+            >
+              Servicios
             </Link>
           </nav>
         )}
