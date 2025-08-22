@@ -1,463 +1,481 @@
-"use client";
-import React, { useRef, useEffect, useState } from "react";
-import {
-  getFirestore, collection, getDocs, query, where, orderBy, limit
-} from "firebase/firestore";
-import { app } from "@/lib/firebase";
-import { InternalPageLayout } from "@/components/layouts/InternalPageLayout";
+"use client"
+import { useEffect, useRef, useState } from "react";
+import { motion, useMotionValue, useAnimationFrame } from "framer-motion";
+import { loadMapLayers } from "@/services/map-graph.service";
+import { Button } from "@/components/ui/button";
+import type { Node, Vector, PointOfInterest } from "@/types/mapas.type";
 
-const db = getFirestore(app);
+// Dijkstra implementation
 
-type Nodo = { node: string; x: number; y: number; nivel: number; };
-type PuntoInteres = { node: string; name: string; x: number; y: number; nivel: number; };
-type Vector = {
-  origen: string; destino: string; distancia: number;
-  nivel?: number; nivel_origen?: number; nivel_destino?: number; tipo?: string;
-  grillaId?: string; edificio?: string;
-};
+// Componente principal de la página
+import { edificiosService, infoPrincipalService } from "@/services/index.generic.service";
+import { getCapaActivaDeNivel } from "@/services/capa-activa.service";
 
-// === util: normalizar links de Google Drive (mismo criterio que el editor) ===
-function extractDriveId(url: string): string | null {
-  if (!url) return null;
-  let m = url.match(/\/file\/d\/([^/]+)/); if (m) return m[1];
-  m = url.match(/[?&]id=([^&]+)/);        if (m) return m[1];
-  return null;
-}
-function driveDirect(url: string, size?: number) {
-  const id = extractDriveId(url);
-  if (!id) return url;
-  return size
-    ? `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`
-    : `https://drive.google.com/uc?export=view&id=${id}`;
-}
+export function MapaInternoPage() {
+  const [edificioId, setEdificioId] = useState("");
+  const [loadingEdificio, setLoadingEdificio] = useState(true);
+  const [pois, setPois] = useState<{ node: string; name: string; nivel: string }[]>([]);
+  const [loadingPois, setLoadingPois] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [showVisor, setShowVisor] = useState(false);
 
-export default function MapaInternoPage() {
-  // Refs simples (dos niveles típicos; si tenés más, podés ampliar con un map por nivel)
-  const img0Ref = useRef<HTMLImageElement>(null);
-  const img1Ref = useRef<HTMLImageElement>(null);
-  const canvas0Ref = useRef<HTMLCanvasElement>(null);
-  const canvas1Ref = useRef<HTMLCanvasElement>(null);
-  const arrow0Ref = useRef<HTMLDivElement>(null);
-  const arrow1Ref = useRef<HTMLDivElement>(null);
-
-  const animArrowLoopRef = useRef<{ [nivel: number]: { stop: boolean } }>({ 0: { stop: false }, 1: { stop: false } });
-
-  // Estado
-  const [edificios, setEdificios] = useState<Array<{id:string; nombre:string; planos:Record<string,string>}>>([]);
-  const [edificioSel, setEdificioSel] = useState<string>("");
-  const [planos, setPlanos] = useState<Record<number,string>>({});
-  const [puntosInteres, setPuntosInteres] = useState<PuntoInteres[]>([]);
-  const [todosLosNodos, setTodosLosNodos] = useState<Nodo[]>([]);
-  const [vectores, setVectores] = useState<Vector[]>([]);
-  const [start, setStart] = useState<string>("");
-  const [end, setEnd] = useState<string>("");
-  const [result, setResult] = useState<React.ReactNode>(null);
-  const [nivelesVisibles, setNivelesVisibles] = useState<number[]>([]); // ⛔️ arranca vacío
-
-  // Paths para redibujar
-  const ultimoPathNivel0 = useRef<string[]>([]);
-  const ultimoPathNivel1 = useRef<string[]>([]);
-
-  // === Cargar edificios (lee planos como objeto)
+  // Al montar, obtener el buildingId de info-principal y setearlo como edificioId
   useEffect(() => {
-    async function cargarEdificios() {
-      const snap = await getDocs(collection(db, "edificios"));
-      const arr: any[] = [];
-      snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
-      const norm = arr.map(e => ({
-        id: e.id,
-        nombre: e.nombre || e.id,
-        planos: (e.planos ?? {}) as Record<string,string>
-      }));
-      // ordenar por nombre para UX
-      norm.sort((a,b)=>a.nombre.localeCompare(b.nombre));
-      setEdificios(norm);
-      if (norm.length > 0) setEdificioSel(norm[0].nombre);
+    async function fetchBuildingId() {
+      setLoadingEdificio(true);
+      const info = await infoPrincipalService.getAll();
+      if (info && info.length > 0 && info[0].buildingId) {
+        setEdificioId(info[0].buildingId);
+      }
+      setLoadingEdificio(false);
     }
-    cargarEdificios();
+    fetchBuildingId();
   }, []);
 
-  // === Cuando cambia edificio: normalizar URLs, obtener última capa por nivel y cargar datos
+  // Cargar todos los POIs de la capa activa REAL de cada nivel al seleccionar edificio
   useEffect(() => {
-    if (!edificioSel) return;
-    (async () => {
-      const edificio = edificios.find(e => e.nombre === edificioSel);
-      if (!edificio) return;
-
-      // 1) Planos (objeto -> record<number,string>) normalizado de Drive
-      const niveles = Object.keys(edificio.planos)
-        .map(n => parseInt(n)).filter(Number.isFinite).sort((a,b)=>a-b);
-
-      const planosNorm: Record<number,string> = {};
-      for (const n of niveles) {
-        planosNorm[n] = driveDirect(edificio.planos[String(n)], 1000);
-      }
-      setPlanos(planosNorm);
-
-      // 2) Para cada nivel: buscar última grillaId y traer nodos/poi/vectores de esa grilla
-      const allNodos: Nodo[] = [];
-      const allPois: PuntoInteres[] = [];
-      const allVecs: Vector[] = [];
-
+    setPois([]); setFrom(""); setTo("");
+    if (!edificioId) return;
+    setLoadingPois(true);
+    edificiosService.getById(edificioId).then(async (ed: any) => {
+      const niveles = Object.keys(ed.planos || {});
+      let allPois: { node: string; name: string; nivel: string }[] = [];
       for (const nivel of niveles) {
-        const qLast = query(
-          collection(db, "grillas_nodos"),
-          where("edificio", "==", edificioSel),
-          where("nivel", "==", nivel),
-          orderBy("grillaId", "desc"),
-          limit(1)
-        );
-        const lastSnap = await getDocs(qLast);
-        const grillaId = lastSnap.docs.length ? lastSnap.docs[0].data().grillaId : null;
-        if (!grillaId) continue;
-
-        // Nodos
-        const qN = query(
-          collection(db, "grillas_nodos"),
-          where("edificio", "==", edificioSel),
-          where("grillaId", "==", grillaId)
-        );
-        const nSnap = await getDocs(qN);
-        nSnap.forEach(d => {
-          const data = d.data() as any;
-          allNodos.push({ node: data.node, x: data.x, y: data.y, nivel });
-        });
-
-        // POIs
-        const qP = query(
-          collection(db, "grillas_interes"),
-          where("edificio", "==", edificioSel),
-          where("grillaId", "==", grillaId)
-        );
-        const pSnap = await getDocs(qP);
-        pSnap.forEach(d => {
-          const data = d.data() as any;
-          allPois.push({ node: data.node, name: data.name, x: data.x, y: data.y, nivel });
-        });
-
-        // Vectores (caminos + escaleras guardadas en esa grilla)
-        const qV = query(
-          collection(db, "vectores"),
-          where("edificio", "==", edificioSel),
-          where("grillaId", "==", grillaId)
-        );
-        const vSnap = await getDocs(qV);
-        vSnap.forEach(d => allVecs.push(d.data() as Vector));
+        // Leer la capa activa REAL del nivel desde Firestore
+        const capaActiva = await getCapaActivaDeNivel(edificioId, nivel);
+        const capasObj = await loadMapLayers({ edificioId, nivel });
+        const data = capasObj[capaActiva];
+        if (data?.pois) {
+          allPois = allPois.concat(data.pois.map((p: any) => ({ node: p.node, name: p.name, nivel })));
+        }
       }
-
-      setTodosLosNodos(allNodos);
-      setPuntosInteres(allPois);
-      setVectores(allVecs);
-
-      // 3) Reset UI: ⛔️ no mostrar planos todavía
-      setStart(""); setEnd(""); setResult(null);
-      ultimoPathNivel0.current = [];
-      ultimoPathNivel1.current = [];
-      setNivelesVisibles([]); // ← clave para no renderizar planos
-      // No redibujo nada porque no hay planos visibles hasta calcular ruta
-    })();
-    // eslint-disable-next-line
-  }, [edificioSel, edificios]);
-
-  // === util dibujo/posicionado ===
-  function resizeCanvasToImg(img: HTMLImageElement | null, canvas: HTMLCanvasElement | null) {
-    if (!img || !canvas) return;
-    canvas.width = img.offsetWidth;
-    canvas.height = img.offsetHeight;
-    canvas.style.width = img.offsetWidth + "px";
-    canvas.style.height = img.offsetHeight + "px";
-  }
-
-  function drawBaseNivel(nivel: number, pathNodes: string[]) {
-    const canvas = nivel === 0 ? canvas0Ref.current : canvas1Ref.current;
-    const ctx = canvas?.getContext("2d");
-    if (!ctx || !canvas) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (pathNodes.length > 1) {
-      ctx.save();
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      let first = true;
-      for (const nodeId of pathNodes) {
-        const p = todosLosNodos.find(u => u.node === nodeId && u.nivel === nivel);
-        if (!p) continue;
-        const px = p.x * canvas.width;
-        const py = p.y * canvas.height;
-        if (first) { ctx.moveTo(px, py); first = false; }
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // Dijkstra multi‑nivel
-  function dijkstra(graph: any, start: string, end: string): string[] {
-    const dist: any = {}, prev: any = {}, visited = new Set<string>();
-    const nodes = Object.keys(graph);
-    nodes.forEach(n => dist[n] = Infinity);
-    dist[start] = 0;
-    const queue = new Set(nodes);
-    while (queue.size) {
-      let u: string | null = null, min = Infinity;
-      queue.forEach(n => { if (dist[n] < min) { min = dist[n]; u = n; } });
-      if (!u || u === end || min === Infinity) break;
-      queue.delete(u);
-      visited.add(u);
-      (graph[u] || []).forEach((neigh: any) => {
-        if (visited.has(neigh.node)) return;
-        const alt = dist[u] + neigh.distancia;
-        if (alt < dist[neigh.node]) { dist[neigh.node] = alt; prev[neigh.node] = u; }
-      });
-    }
-    const path: string[] = [];
-    for (let at = end; at !== undefined; at = prev[at]) path.unshift(at);
-    return path;
-  }
-
-  function animarFlechaEnLoop(nivel: number, pathNodes: string[]) {
-    animArrowLoopRef.current[nivel].stop = true;
-    setTimeout(() => {
-      animArrowLoopRef.current[nivel].stop = false;
-      const flechaRef = nivel === 0 ? arrow0Ref.current : arrow1Ref.current;
-      const canvas = nivel === 0 ? canvas0Ref.current : canvas1Ref.current;
-      if (!flechaRef || !canvas || !pathNodes.length) return;
-      const puntos = pathNodes.map(nodo => {
-        const u = todosLosNodos.find(u => u.node === nodo && u.nivel === nivel);
-        return u ? [u.x, u.y] : null;
-      }).filter(Boolean) as [number, number][];
-      if (puntos.length < 2) { flechaRef.style.display = "none"; return; }
-      flechaRef.style.display = "block";
-      let segment = 0, t = 0, duration = 1100;
-      function step() {
-        if (animArrowLoopRef.current[nivel].stop) { flechaRef.style.display = "none"; return; }
-        const [x1, y1] = puntos[segment];
-        const [x2, y2] = puntos[(segment + 1) % puntos.length];
-        const cx = x1 + (x2 - x1) * t;
-        const cy = y1 + (y2 - y1) * t;
-        const angleRad = Math.atan2(y2 - y1, x2 - x1);
-        ubicarFlecha(flechaRef, cx, cy, angleRad);
-        if (t < 1) { t += 1 / (duration / 16); requestAnimationFrame(step); }
-        else { segment = (segment + 1) % (puntos.length - 1); t = 0; requestAnimationFrame(step); }
-      }
-      step();
-    }, 20);
-  }
-
-  // Posicionamiento proporcional + microajuste
-  function ubicarFlecha(flecha: HTMLDivElement | null, x: number, y: number, angleRad: number) {
-    if (!flecha) return;
-    const offset = 8;
-    const ox = Math.cos(angleRad) * offset;
-    const oy = Math.sin(angleRad) * offset;
-    flecha.style.position = "absolute";
-    flecha.style.left = `calc(${x * 100}% + ${ox}px)`;
-    flecha.style.top  = `calc(${y * 100}% + ${oy}px)`;
-    flecha.style.transform = `translate(-50%, -50%) rotate(${angleRad + Math.PI / 2}rad)`;
-    flecha.style.display = "block";
-  }
-
-  function redibujarRutasSiHay() {
-    resizeCanvasToImg(img0Ref.current, canvas0Ref.current);
-    resizeCanvasToImg(img1Ref.current, canvas1Ref.current);
-    drawBaseNivel(0, ultimoPathNivel0.current || []);
-    drawBaseNivel(1, ultimoPathNivel1.current || []);
-  }
-
-  function resetearVistaDeRuta() {
-    setResult(null);
-    animArrowLoopRef.current[0].stop = true;
-    animArrowLoopRef.current[1].stop = true;
-    if (arrow0Ref.current) arrow0Ref.current.style.display = "none";
-    if (arrow1Ref.current) arrow1Ref.current.style.display = "none";
-    ultimoPathNivel0.current = [];
-    ultimoPathNivel1.current = [];
-    drawBaseNivel(0, []); drawBaseNivel(1, []);
-    setNivelesVisibles([]); // ⛔️ mantener vacía hasta calcular
-  }
-
-  // === Calcular ruta (recién acá mostramos planos) ===
-  async function calcularRuta() {
-    resetearVistaDeRuta();
-    if (!start || !end || start === end) {
-      alert("Seleccioná un origen y destino distintos");
-      return;
-    }
-    const [startNode, nivelStart] = start.split("|");
-    const [endNode,   nivelEnd]   = end.split("|");
-
-    // Grafo usando última capa por nivel (ya cargada) y escaleras con nivel_origen/destino
-    const graph: any = {};
-    todosLosNodos.forEach(n => graph[`${n.node}|${n.nivel}`] = []);
-    vectores.forEach(v => {
-      const n0 = todosLosNodos.find(n => n.node === v.origen && (n.nivel === (v.nivel_origen ?? v.nivel)));
-      const n1 = todosLosNodos.find(n => n.node === v.destino && (n.nivel === (v.nivel_destino ?? v.nivel)));
-      if (n0 && n1) {
-        graph[`${n0.node}|${n0.nivel}`].push({ node: `${n1.node}|${n1.nivel}`, distancia: v.distancia });
-        graph[`${n1.node}|${n1.nivel}`].push({ node: `${n0.node}|${n0.nivel}`, distancia: v.distancia });
-      }
+      setPois(allPois);
+      setLoadingPois(false);
     });
+  }, [edificioId]);
 
-    const path = dijkstra(graph, `${startNode}|${nivelStart}`, `${endNode}|${nivelEnd}`);
-    if (path.length < 2) {
-      setResult(<span className="text-red-600">No hay ruta posible.</span>);
-      setNivelesVisibles([]); // sigue sin mostrar planos
-      return;
-    }
-
-    // Niveles únicos en orden de aparición, con el nivel de origen primero
-    const nivelStartNum = +nivelStart;
-    const nivelesEnRuta: number[] = [];
-    for (const step of path) {
-      const n = +step.split("|")[1];
-      if (!Number.isFinite(n)) continue;
-      if (!nivelesEnRuta.includes(n)) nivelesEnRuta.push(n);
-    }
-    const orderedNiveles = [nivelStartNum, ...nivelesEnRuta.filter(n => n !== nivelStartNum)];
-    setNivelesVisibles(orderedNiveles); // ✅ ahora sí mostramos SOLO los niveles implicados
-
-    // Separar tramos por nivel y dibujar
-    const pathNivel0: string[] = [];
-    const pathNivel1: string[] = [];
-    for (const step of path) {
-      const [node, n] = step.split("|");
-      if (+n === 0) pathNivel0.push(node);
-      if (+n === 1) pathNivel1.push(node);
-    }
-    ultimoPathNivel0.current = pathNivel0;
-    ultimoPathNivel1.current = pathNivel1;
-
-    drawBaseNivel(0, pathNivel0);
-    drawBaseNivel(1, pathNivel1);
-    if (pathNivel0.length > 1) animarFlechaEnLoop(0, pathNivel0);
-    if (pathNivel1.length > 1) animarFlechaEnLoop(1, pathNivel1);
-  }
-
-  function onImgLoad(nivel: number) {
-    resizeCanvasToImg(
-      nivel === 0 ? img0Ref.current : img1Ref.current,
-      nivel === 0 ? canvas0Ref.current : canvas1Ref.current
-    );
-    drawBaseNivel(nivel, nivel === 0 ? ultimoPathNivel0.current : ultimoPathNivel1.current);
-  }
+  const handleCalcular = (e: any) => {
+    e.preventDefault();
+    setShowVisor(true);
+  };
 
   return (
-    <InternalPageLayout>
-    <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">¿A dónde querés ir?</h2>
-
-      <label className="font-semibold">Edificio:</label>
-      <select
-        value={edificioSel}
-        onChange={e => setEdificioSel(e.target.value)}
-        className="border p-2 rounded w-full mb-4"
-      >
-        {edificios.map(e => (
-          <option key={e.id} value={e.nombre}>{e.nombre}</option>
-        ))}
-      </select>
-
-      <label className="font-semibold">Desde:</label>
-      <select
-        value={start}
-        onChange={e => { setStart(e.target.value); /* no mostramos planos aún */ }}
-        className="border p-2 rounded w-full mb-4"
-      >
-        <option value="">Seleccioná origen</option>
-        {puntosInteres.map(u => (
-          <option key={u.node + "|" + u.nivel} value={u.node + "|" + u.nivel}>
-            {u.name} [Nivel {u.nivel}]
-          </option>
-        ))}
-      </select>
-
-      <label className="font-semibold">Hasta:</label>
-      <select
-        value={end}
-        onChange={e => { setEnd(e.target.value); /* no mostramos planos aún */ }}
-        className="border p-2 rounded w-full mb-4"
-      >
-        <option value="">Seleccioná destino</option>
-        {puntosInteres.map(u => (
-          <option key={u.node + "|" + u.nivel} value={u.node + "|" + u.nivel}>
-            {u.name} [Nivel {u.nivel}]
-          </option>
-        ))}
-      </select>
-
-      <button
-        className="bg-blue-600 text-white px-4 py-2 rounded w-full"
-        onClick={calcularRuta}
-      >
-        Calcular ruta
-      </button>
-
-      {/* Planos: NO se muestran hasta que haya nivelesVisibles */}
-      {nivelesVisibles.length > 0 && (
-        <div className="mt-8 flex flex-col gap-5 items-center justify-center w-full" id="planos">
-          {nivelesVisibles.map(nivel => (
-            <div key={nivel} className="plano-container relative w-full max-w-lg bg-gray-50 border-2 border-blue-600/10 rounded-xl shadow p-2 min-h-[180px]">
-              <span className="plano-title absolute left-4 top-3 z-30 bg-blue-700 text-white px-4 py-1 rounded-2xl font-bold shadow pointer-events-none">
-                Nivel {nivel}
-              </span>
-              <div className="relative">
-                <img
-                  ref={nivel === 0 ? img0Ref : img1Ref}
-                  className="plano-img w-full max-w-lg rounded-xl shadow relative z-10"
-                  src={planos[nivel]}
-                  alt={`Plano Nivel ${nivel}`}
-                  onLoad={() => onImgLoad(nivel)}
-                  onError={(e) => {
-                    const src = (e.target as HTMLImageElement).src;
-                    const id = extractDriveId(src);
-                    if (id && src.includes("/uc?export=view")) {
-                      (e.target as HTMLImageElement).src = `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
-                    }
-                  }}
-                />
-                <canvas
-                  ref={nivel === 0 ? canvas0Ref : canvas1Ref}
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none rounded-xl z-20"
-                />
-                <div
-                  ref={nivel === 0 ? arrow0Ref : arrow1Ref}
-                  style={{
-                    position: "absolute",
-                    width: "24px",
-                    height: "24px",
-                    pointerEvents: "none",
-                    zIndex: 30,
-                    display: "none",
-                    transition: "transform 0.15s"
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: `<svg viewBox="0 0 32 32" width="24" height="24" fill="#22c55e" stroke="#fff" stroke-width="2"><polygon points="16,3 29,29 16,24 3,29 16,3"/></svg>`
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+        <div
+          className="max-w-xl mx-auto bg-zinc-900 rounded-lg shadow p-6 mt-6 border border-zinc-700"
+          style={{ marginTop: 'clamp(110px, 15vw, 140px)' }}
+        >
+        <h2
+          className="text-2xl font-bold mb-4 text-white text-center"
+          style={{ width: '100%' }}
+        >
+          ¿A donde quieres ir?
+        </h2>
+      {(loadingEdificio || loadingPois) ? (
+        <div className="flex items-center justify-center h-32">
+          <span className="text-zinc-300">Cargando ubicaciones...</span>
+        </div>
+      ) : (
+        <form onSubmit={handleCalcular} className="space-y-4">
+          <div>
+            <label className="block mb-1 font-semibold text-zinc-200">Desde:</label>
+            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={from} onChange={e => setFrom(e.target.value)} required>
+              <option value="">Seleccione origen</option>
+              {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 font-semibold text-zinc-200">Hasta:</label>
+            <select className="w-full border border-zinc-700 rounded p-2 bg-zinc-800 text-zinc-100" value={to} onChange={e => setTo(e.target.value)} required>
+              <option value="">Seleccione destino</option>
+              {pois.map(p => <option key={p.node} value={p.node}>{p.name} [Nivel {p.nivel}]</option>)}
+            </select>
+          </div>
+          <Button className="w-full bg-zinc-100 text-zinc-900 font-bold hover:bg-white" type="submit" disabled={!from || !to || !edificioId}>Calcular ruta</Button>
+        </form>
+      )}
+      {showVisor && from && to && (
+        <div className="mt-8">
+          <MapVisor edificioId={edificioId} nivel="" capa="Capa 1" from={from} to={to} />
         </div>
       )}
-
-      <div className="mt-8" id="result">{result}</div>
-
-      <style>{`
-        .plano-title { font-size: 1rem; }
-        @media (max-width: 900px) { .plano-container { max-width: 100vw; } .plano-img, canvas { max-width: 99vw; } }
-        @media (max-width: 600px) {
-          .plano-title { font-size: 0.97rem; padding: 2px 11px;}
-          .plano-img, canvas { max-width: 98vw; border-radius: 8px; }
-          .plano-container { min-height: 140px; border-radius: 13px;}
-        }
-        @media (max-width: 440px) {
-          .plano-title { font-size: .88rem; left: 2px;}
-          .plano-container { min-height: 90px; border-radius: 9px;}
-          .plano-img, canvas { border-radius: 7px; }
-        }
-      `}</style>
     </div>
-    </InternalPageLayout>
   );
+}
+function dijkstra(
+  nodes: Node[],
+  connections: Vector[],
+  start: string,
+  end: string
+): string[] {
+  const distances: Record<string, number> = {};
+  const prev: Record<string, string | null> = {};
+  const queue = new Set<string>();
+  nodes.forEach((n) => {
+    distances[n.node] = Infinity;
+    prev[n.node] = null;
+    queue.add(n.node);
+  });
+  distances[start] = 0;
+  while (queue.size > 0) {
+    const u = Array.from(queue).reduce((min, n) =>
+      distances[n] < distances[min] ? n : min, Array.from(queue)[0]);
+    queue.delete(u);
+    if (u === end) break;
+    connections.filter((c) => c.origen === u || c.destino === u).forEach((c) => {
+      const v = c.origen === u ? c.destino : c.origen;
+      if (!queue.has(v)) return;
+      const alt = distances[u] + (c.distancia || 1);
+      if (alt < distances[v]) {
+        distances[v] = alt;
+        prev[v] = u;
+      }
+    });
+  }
+  // Build path
+  const path: string[] = [];
+  let u: string | null = end;
+  while (u && prev[u]) {
+    path.unshift(u);
+    u = prev[u];
+  }
+  if (u === start) path.unshift(start);
+  return path;
+}
+
+
+
+interface MapVisorProps {
+  edificioId: string;
+  nivel: string;
+  capa: string;
+  from: string;
+  to: string;
+}
+
+
+export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
+  // ...existing code...
+  // Nueva animación de flecha: recorre el camino, desaparece al llegar, vuelve a empezar
+  function getArrowSvg(path: string[], levelData: any, nivel: string, animPos: number) {
+    if (!path || path.length < 2) return null;
+    const allNodes = Object.values(levelData).flatMap((l: any) => l.nodes);
+    const points = path.map(id => allNodes.find((n: any) => n.node === id)).filter(Boolean);
+    if (points.length < 2) return null;
+    // Calcular longitudes de cada segmento
+    let total = 0;
+    const segLengths: number[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+      segLengths.push(len);
+      total += len;
+    }
+    if (total === 0) return null;
+    // Si animPos >= 1, no mostrar flecha (bucle limpio)
+  if (animPos <= 0 || animPos >= 0.98) return null;
+    // Calcular en qué segmento está la flecha
+    let dist = animPos * total;
+    let segIdx = 0;
+    while (segIdx < segLengths.length && dist > segLengths[segIdx]) {
+      dist -= segLengths[segIdx];
+      segIdx++;
+    }
+    if (segIdx >= segLengths.length) return null;
+    const a = points[segIdx];
+    const b = points[segIdx + 1];
+    if (!a || !b) return null;
+    // Solo mostrar la flecha si ambos nodos están en este nivel
+    let nivelA = null, nivelB = null;
+    for (const [nivelK, dataK] of Object.entries(levelData)) {
+      if (dataK && Array.isArray((dataK as any).nodes)) {
+        if ((dataK as any).nodes.some((n: any) => n.node === a.node)) nivelA = nivelK;
+        if ((dataK as any).nodes.some((n: any) => n.node === b.node)) nivelB = nivelK;
+      }
+    }
+    if (nivelA !== nivel || nivelB !== nivel) return null;
+    let t = segLengths[segIdx] === 0 ? 0 : dist / segLengths[segIdx];
+    t = Math.max(0, Math.min(1, t));
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+    return (
+      <g filter="url(#gmaps-arrow-shadow)">
+        <polygon
+          points="0,-18 32,0 0,18"
+          fill="#22c55e"
+          stroke="#fff"
+          strokeWidth={3}
+          opacity={0.98}
+          transform={`translate(${x},${y}) rotate(${angle})`}
+          style={{ transition: 'all 0.2s' }}
+        />
+      </g>
+    );
+  }
+  const [allLevels, setAllLevels] = useState<string[]>([]);
+  const [levelData, setLevelData] = useState<Record<string, { nodes: Node[]; connections: Vector[]; pois: PointOfInterest[] }>>({});
+  const [planos, setPlanos] = useState<Record<string, string>>({});
+  const [path, setPath] = useState<string[]>([]);
+  // Valor animado para la flecha
+  const t = useMotionValue(0);
+  const [arrowT, setArrowT] = useState(0);
+  // Duración de la animación en segundos
+  const [arrowDuration, setArrowDuration] = useState(2);
+
+  // Calcular duración según la longitud del camino
+  useEffect(() => {
+    if (!path.length) return;
+    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    }
+    if (total === 0) return;
+    setArrowDuration(total / 180); // px/seg
+  }, [path, levelData]);
+
+  // Animación de la flecha con Framer Motion
+  useEffect(() => {
+    let start = performance.now();
+    let stopped = false;
+    function animate(now: number) {
+      if (stopped) return;
+      const elapsed = (now - start) / 1000;
+      let localT = (elapsed % arrowDuration) / arrowDuration;
+      if (localT >= 1) localT = 0;
+      t.set(localT);
+      setArrowT(localT);
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+    return () => { stopped = true; };
+  }, [arrowDuration, t]);
+  const [animPos, setAnimPos] = useState(0); // 0 a 1, posición a lo largo del path
+  const animRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cargar todos los niveles y sus datos de la capa 1
+  useEffect(() => {
+    async function fetchAllLevels() {
+      const ed = await import("@/services/index.generic.service").then(m => m.edificiosService.getById(edificioId));
+      if (!ed) return;
+      const niveles = Object.keys(ed.planos || {});
+      setAllLevels(niveles);
+      setPlanos(ed.planos || {});
+      const dataByLevel: Record<string, { nodes: Node[]; connections: Vector[]; pois: PointOfInterest[] }> = {};
+      for (const nivel of niveles) {
+        // Obtener la capa activa directamente desde Firestore
+        const capaActiva = await getCapaActivaDeNivel(edificioId, nivel);
+        const capasObj = await loadMapLayers({ edificioId, nivel });
+        console.log(`Nivel: ${nivel}, capaActiva: '${capaActiva}'`, capasObj);
+        const data = capasObj[capaActiva];
+        if (data) {
+          dataByLevel[nivel] = {
+            nodes: data.nodes || [],
+            connections: data.connections || [],
+            pois: data.pois || [],
+          };
+        }
+      }
+      setLevelData(dataByLevel);
+    }
+    fetchAllLevels();
+    return () => {
+      if (animRef.current) clearInterval(animRef.current);
+    };
+  }, [edificioId, capa]);
+
+  // Calcular el camino entre from y to usando todos los nodos/conexiones de todos los niveles
+  useEffect(() => {
+    // Unir todos los nodos y conexiones
+    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+    const allConns = Object.values(levelData).flatMap(l => l.connections);
+    if (from && to && allNodes.length && allConns.length) {
+      setPath(dijkstra(allNodes, allConns, from, to));
+    } else {
+      setPath([]);
+    }
+  }, [from, to, levelData]);
+
+  // Animación de la flecha: recorre toda la ruta suavemente
+  useEffect(() => {
+    if (!path.length) return;
+    setAnimPos(0);
+    let running = true;
+    const speed = 180; // px por segundo
+    let total = 0;
+    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+    for (let i = 0; i < points.length - 1; i++) {
+      total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+    }
+    if (total === 0) return;
+    let start = performance.now();
+    function step(ts: number) {
+      if (!running) return;
+      const elapsed = (ts - start) / 1000;
+      const cycleTime = total / speed;
+      const t = (elapsed % cycleTime) / cycleTime;
+      setAnimPos(t);
+      requestAnimationFrame(step);
+    }
+    const raf = requestAnimationFrame(step);
+    return () => {
+      running = false;
+      if (animRef.current) clearInterval(animRef.current);
+      cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line
+  }, [path, levelData]);
+
+  // Calcular los niveles que forman parte de la ruta
+  const nivelesEnRuta = new Set<string>();
+  for (let i = 0; i < path.length; i++) {
+    for (const [nivelK, dataK] of Object.entries(levelData)) {
+      if (dataK.nodes.some(n => n.node === path[i])) {
+        nivelesEnRuta.add(nivelK);
+      }
+    }
+  }
+  // Si no hay ruta, no mostrar nada
+  if (nivelesEnRuta.size === 0) return null;
+  // Determinar el nivel del punto de partida (primer nodo de la ruta)
+  let nivelInicio: string | null = null;
+  if (path.length > 0) {
+    for (const [nivelK, dataK] of Object.entries(levelData)) {
+      if (dataK.nodes.some(n => n.node === path[0])) {
+        nivelInicio = nivelK;
+        break;
+      }
+    }
+  }
+  // Ordenar: primero el nivel de inicio, luego los demás en el orden original
+  const nivelesRutaOrdenados = Array.from(nivelesEnRuta);
+  if (nivelInicio) {
+    nivelesRutaOrdenados.sort((a, b) => (a === nivelInicio ? -1 : b === nivelInicio ? 1 : 0));
+  }
+  return (
+    <div className="flex flex-col gap-8">
+      {nivelesRutaOrdenados.map(nivel => {
+        const data = levelData[nivel];
+        if (!data) return null;
+        // Solo mostrar el plano si hay segmentos de ruta en este nivel
+        const pathSegments = [] as { from: Node; to: Node }[];
+        for (let i = 0; i < path.length - 1; i++) {
+          const n1 = data.nodes.find(n => n.node === path[i]);
+          const n2 = data.nodes.find(n => n.node === path[i + 1]);
+          if (n1 && n2) pathSegments.push({ from: n1, to: n2 });
+        }
+        if (pathSegments.length === 0) return null;
+  const planoUrl = planos[String(nivel)] || null;
+  console.log('DEBUG planoUrl', { planos, nivel, planoUrl });
+        return (
+          <div key={nivel} className="mb-6">
+            <h3 className="font-bold mb-2 text-zinc-200">Plano nivel {nivel}</h3>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-2 w-full max-w-2xl mx-auto">
+              <div style={{ width: '100%', aspectRatio: '1 / 1' }}>
+                <svg viewBox="0 0 800 800" width="100%" height="100%" style={{ background: '#18181b', borderRadius: 8, display: 'block', width: '100%', height: '100%' }} preserveAspectRatio="xMidYMid meet">
+                  <defs>
+                    <linearGradient id="gmaps-blue" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#4285F4" />
+                      <stop offset="100%" stopColor="#0a58ca" />
+                    </linearGradient>
+                    <filter id="gmaps-glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="7" result="coloredBlur"/>
+                      <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                    <filter id="gmaps-arrow-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.4"/>
+                    </filter>
+                    <style>{`
+                      .gmaps-dash {
+                        stroke-dasharray: 16 12;
+                        stroke-dashoffset: 0;
+                        animation: dashmove 1.2s linear infinite;
+                      }
+                      @keyframes dashmove {
+                        to { stroke-dashoffset: -28; }
+                      }
+                    `}</style>
+                  </defs>
+                  {planoUrl && (
+                    <image href={planoUrl} x={0} y={0} width={800} height={800} style={{ pointerEvents: 'none' }} />
+                  )}
+                  {/* Camino: líneas verdes y puntos */}
+                  {pathSegments.map((seg, idx) => (
+                    <g key={idx}>
+                      {/* Línea principal verde */}
+                      <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#22c55e" strokeWidth={10} opacity={0.5} filter="url(#gmaps-glow)" />
+                      <line x1={seg.from.x} y1={seg.from.y} x2={seg.to.x} y2={seg.to.y} stroke="#22c55e" strokeWidth={5} />
+                      {/* Puntos en cada nodo del segmento */}
+                      <circle cx={seg.from.x} cy={seg.from.y} r={10} fill="#fff" stroke="#22c55e" strokeWidth={4} />
+                      <circle cx={seg.from.x} cy={seg.from.y} r={4} fill="#22c55e" />
+                      {/* Si es el último segmento, dibuja punto en el destino también (antes del icono GPS) */}
+                      {idx === pathSegments.length - 1 && (
+                        <>
+                          <circle cx={seg.to.x} cy={seg.to.y} r={10} fill="#fff" stroke="#22c55e" strokeWidth={4} />
+                          <circle cx={seg.to.x} cy={seg.to.y} r={4} fill="#22c55e" />
+                        </>
+                      )}
+                    </g>
+                  ))}
+                  {/* Icono de ubicación: pin rojo solo en el nivel destino */}
+                  {(() => {
+                    if (!path || path.length === 0) return null;
+                    const allNodes = Object.values(levelData).flatMap(l => l.nodes);
+                    const points = path.map(id => allNodes.find(n => n.node === id)).filter(Boolean) as Node[];
+                    if (points.length < 2) return null;
+                    const dest = points[points.length - 1];
+                    // Buscar el nivel del nodo destino
+                    let nivelDestino = null;
+                    for (const [nivelK, dataK] of Object.entries(levelData)) {
+                      if (dataK.nodes.some(n => n.node === dest.node)) nivelDestino = nivelK;
+                    }
+                    if (nivelDestino !== nivel) return null;
+                    // SVG pin rojo estilo Google Maps, con la punta inferior apuntando al centro del nodo
+                    // El pin tiene altura 40, la punta está en (0,40), así que ajustamos el translate
+                    return (
+                      <g transform={`translate(${dest.x},${dest.y - 40})`}>
+                        <g>
+                          <ellipse cx={0} cy={68} rx={18} ry={10} fill="#cbd5e1" opacity={0.7} />
+                          <path d="M 0 0 C 18 0 18 24 0 40 C -18 24 -18 0 0 0 Z" fill="#ef4444" stroke="#333" strokeWidth={4} />
+                          <circle cx={0} cy={12} r={10} fill="#cbd5e1" stroke="#333" strokeWidth={4} />
+                          <circle cx={0} cy={12} r={6} fill="#cbd5e1" />
+                        </g>
+                      </g>
+                    );
+                  })()}
+                  {/* Flecha animada con Framer Motion: recorre el camino, desaparece al llegar, vuelve a empezar */}
+                  <motion.g>
+                    {getArrowSvg(path, levelData, nivel, arrowT)}
+                  </motion.g>
+                </svg>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+// fin MapVisor
+
+
+// Utilidad para dibujar la flecha sin transformación
+function getArrowPoints(from: Node, to: Node, length: number, width: number) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const angle = Math.atan2(dy, dx);
+  const tipX = to.x;
+  const tipY = to.y;
+  const baseX = tipX - length * Math.cos(angle);
+  const baseY = tipY - length * Math.sin(angle);
+  const leftX = baseX + (width / 2) * Math.sin(angle);
+  const leftY = baseY - (width / 2) * Math.cos(angle);
+  const rightX = baseX - (width / 2) * Math.sin(angle);
+  const rightY = baseY + (width / 2) * Math.cos(angle);
+  return `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`;
+}
 }
