@@ -62,10 +62,13 @@ export function MapaInternoPage() {
   };
 
     return (
-        <div
-          className="max-w-xl mx-auto rounded-lg shadow-lg p-6 mt-6"
-          style={{ marginTop: 'clamp(110px, 15vw, 140px)' }}
-        >
+    <div
+      className="max-w-xl mx-auto rounded-lg shadow-lg p-6 mt-6"
+    >
+    <div className="w-full max-w-4xl mb-6">
+          <h3 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900">Mapa Interno</h3>
+          <p className="text-gray-600 text-lg max-w-3xl mt-3">Este mapa le ayudara a encontrar lugares dentro del recinto.</p>
+    </div>
   <div className="w-full rounded-lg p-6 bg-white"
        style={{ border: '1px solid var(--secondary-color)' }}>
     <h2 className="text-2xl font-bold mb-4 text-center text-gray-900">¿A dónde quieres ir?</h2>
@@ -386,10 +389,10 @@ export function MapVisor({ edificioId, nivel, capa, from, to }: MapVisorProps) {
   console.log('DEBUG planoUrl', { planos, nivel, planoUrl });
         return (
           <div key={nivel} className="mb-6">
-            <h3 className="font-bold mb-2 text-zinc-200">Plano nivel {nivel}</h3>
-            <div className="rounded-lg border border-zinc-700 bg-zinc-800 p-2 w-full max-w-2xl mx-auto">
+            <h3 className="font-bold mb-2 text-zinc-800">Plano nivel {nivel}</h3>
+            <div className="rounded-lg border border-zinc-700 p-2 w-full max-w-2xl mx-auto">
               <div style={{ width: '100%', aspectRatio: '1 / 1' }}>
-                <svg viewBox="0 0 800 800" width="100%" height="100%" style={{ background: '#18181b', borderRadius: 8, display: 'block', width: '100%', height: '100%' }} preserveAspectRatio="xMidYMid meet">
+                <svg viewBox="0 0 800 800" width="100%" height="100%" style={{ borderRadius: 8, display: 'block', width: '100%', height: '100%' }} preserveAspectRatio="xMidYMid meet">
                   <defs>
                     <linearGradient id="gmaps-blue" x1="0" y1="0" x2="1" y2="1">
                       <stop offset="0%" stopColor="#4285F4" />

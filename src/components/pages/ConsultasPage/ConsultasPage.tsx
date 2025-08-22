@@ -162,20 +162,32 @@ END:VCARD`;
 
   return (
     <InternalPageLayout>
-    <main className="min-h-screen bg-primaryColor">
-      <div className="flex flex-col items-center">
-        <div className="max-w-4xl mx-auto">
-          <h3 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-secondaryColor">Consultas</h3>
-          <p className="text-secondaryColor-80 text-lg max-w-3xl mx-auto">Llene el formulario con su consulta para que un hermano encargado se comunique con usted</p>
+    <main className="min-h-screen bg-white text-gray-900">
+      <div className="flex flex-col items-center py-12 px-4">
+        <div className="w-full max-w-4xl">
+          <h3 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900">Consultas</h3>
+          <p className="text-gray-600 text-lg max-w-3xl mt-3">Llene el formulario con su consulta para que un hermano encargado se comunique con usted</p>
         </div>
-        <div>
-          <Tabs defaultValue="consultas" className="w-[400px]">
-            <TabsList>
-              <TabsTrigger value="consultas">Consultas</TabsTrigger>
-              <TabsTrigger value="voluntario">Servicio Voluntario</TabsTrigger>
+        <div className="w-full max-w-4xl mt-8 bg-white rounded-xl shadow-lg border border-gray-100">
+          <div className="p-6 md:p-8">
+          <Tabs defaultValue="consultas" className="w-full">
+            <TabsList className="flex space-x-2 p-1 rounded-md border transition-colors"
+              style={{ background: 'var(--primary-color)', borderColor: 'var(--secondary-color)'}}>
+              <TabsTrigger
+                value="consultas"
+                className="px-4 py-2 text-sm font-medium rounded-md transition-colors data-[state=active]:bg-[var(--secondary-color)] data-[state=active]:text-[var(--primary-color)]"
+              >
+                Consultas
+              </TabsTrigger>
+              <TabsTrigger
+                value="voluntario"
+                className="px-4 py-2 text-sm font-medium rounded-md transition-colors data-[state=active]:bg-[var(--secondary-color)] data-[state=active]:text-[var(--primary-color)]"
+              >
+                Servicio Voluntario
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="consultas">
-              <Card>
+              <Card className="bg-white">
                 <CardHeader>
                   <CardTitle>Formulario de Consultas</CardTitle>
                   <CardDescription>Complete el formulario y a la brevedad un hermano del departamento de informes se comunicará con usted</CardDescription>
@@ -235,14 +247,20 @@ END:VCARD`;
                           </FormItem>
                         )}
                       />
-                      <Button className="cursor-pointer w-24" type="submit"disabled={formConsultas.formState.isSubmitting}>{formConsultas.formState.isSubmitting ? "Enviando..." : "Enviar"}</Button>
+                      <Button className="w-32 text-sm font-medium rounded-md px-4 py-2 shadow-sm transition-colors"
+                        type="submit"
+                        disabled={formConsultas.formState.isSubmitting}
+                        style={{ background: 'var(--secondary-color)', color: 'var(--primary-color)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-color)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--secondary-color)')}
+                      >{formConsultas.formState.isSubmitting ? "Enviando..." : "Enviar"}</Button>
                     </form>
                   </Form>
                 </CardContent>
               </Card>
             </TabsContent>
             <TabsContent value="voluntario">
-              <Card>
+              <Card className="bg-white">
                 <CardHeader>
                   <CardTitle>Formulario de Servicio Voluntario</CardTitle>
                   <CardDescription>Complete el formulario y a la brevedad un hermano del departamento de servicio voluntario se comunicará con usted para coordinar en que área puede colaborar.</CardDescription>
@@ -325,13 +343,13 @@ END:VCARD`;
                               <RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4">
                                 <FormItem>
                                   <FormControl>
-                                    <RadioGroupItem value="Masculino"/>
+                                    <RadioGroupItem className='mr-2 mb-[-2px]' value="Masculino"/>
                                   </FormControl>
                                   <FormLabel>Masculino</FormLabel>
                                 </FormItem>
                                 <FormItem>
                                   <FormControl>
-                                    <RadioGroupItem value="Femenino"/>
+                                    <RadioGroupItem className='mr-2 mb-[-2px]' value="Femenino"/>
                                   </FormControl>
                                   <FormLabel>Femenino</FormLabel>
                                 </FormItem>
@@ -353,7 +371,7 @@ END:VCARD`;
                               render={({ field }) => (
                                 <FormItem>
                                   <FormControl>
-                                    <Checkbox
+                                    <Checkbox className="mr-2"
                                       onCheckedChange={(checked) => {
                                         return checked ? field.onChange([...field.value, "Viernes"]) : field.onChange(field.value.filter((value) => value !== "Viernes"));
                                       }}
@@ -369,7 +387,7 @@ END:VCARD`;
                               render={({ field }) => (
                                 <FormItem>
                                   <FormControl>
-                                    <Checkbox
+                                    <Checkbox className="mr-2"
                                       onCheckedChange={(checked) => {
                                         return checked ? field.onChange([...field.value, "Sábado"]) : field.onChange(field.value.filter((value) => value !== "Sábado"));
                                       }}
@@ -385,7 +403,7 @@ END:VCARD`;
                               render={({ field }) => (
                                 <FormItem>
                                   <FormControl>
-                                    <Checkbox
+                                    <Checkbox className="mr-2"
                                       onCheckedChange={(checked) => {
                                         return checked ? field.onChange([...field.value, "Domingo"]) : field.onChange(field.value.filter((value) => value !== "Domingo"));
                                       }}
@@ -409,19 +427,19 @@ END:VCARD`;
                               <RadioGroup onValueChange={field.onChange} value={field.value}>
                                 <FormItem>
                                   <FormControl>
-                                    <RadioGroupItem value="Mañana"/>
+                                    <RadioGroupItem className="mr-2" value="Mañana"/>
                                   </FormControl>
                                   <FormLabel>Mañana</FormLabel>
                                 </FormItem>
                                 <FormItem>
                                   <FormControl>
-                                    <RadioGroupItem value="Tarde"/>
+                                    <RadioGroupItem className="mr-2" value="Tarde"/>
                                   </FormControl>
                                   <FormLabel>Tarde</FormLabel>
                                 </FormItem>
                                 <FormItem>
                                   <FormControl>
-                                    <RadioGroupItem value="Indistinto"/>
+                                    <RadioGroupItem className="mr-2" value="Indistinto"/>
                                   </FormControl>
                                   <FormLabel>Indistinto</FormLabel>
                                 </FormItem>
@@ -444,14 +462,20 @@ END:VCARD`;
                           </FormItem>
                         )}
                       />
-                      <Button className="cursor-pointer w-24" type="submit" disabled={formServicioVoluntario.formState.isSubmitting}>{formServicioVoluntario.formState.isSubmitting ? "Enviando..." : "Enviar"}</Button>
+                      <Button className="w-32 text-sm font-medium rounded-md px-4 py-2 shadow-sm transition-colors"
+                        type="submit"
+                        disabled={formServicioVoluntario.formState.isSubmitting}
+                        style={{ background: 'var(--secondary-color)', color: 'var(--primary-color)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-color)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--secondary-color)')}
+                      >{formServicioVoluntario.formState.isSubmitting ? "Enviando..." : "Enviar"}</Button>
                     </form>
                   </Form>
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
-          
+          </div>
         </div>
       </div>
     </main>
